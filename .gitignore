@@ -1,0 +1,21 @@
+# Ignore all node_modules anywhere
+node_modules/
+
+# Or explicitly (both work)
+backend/node_modules/
+frontend/node_modules/
+
+# env files
+.env
+.env.*
+
+# build outputs
+dist/
+build/
+
+# logs
+*.log
+
+# editor/system
+.vscode/
+.DS_Store
