@@ -8,21 +8,10 @@ return new Promise((resolve, reject) => {
     VALUES (?, ?, ?, ?, ?, ?)
     `;
 
-    db.query(
-    query,
-    [
-        data.amount,
-        data.categoryId,
-        data.paidBy,
-        data.date,
-        data.description,
-        data.splitType
-    ],
-    (err, result) => {
+    db.query(query,[data.amount,data.categoryId,data.paidBy,data.date,data.description,data.splitType],(err, result) => {
         if (err) return reject(err);
         resolve(result.insertId);
-    }
-    );
+    });
 });
 };
 
@@ -38,4 +27,20 @@ return new Promise((resolve, reject) => {
     resolve();
     });
 });
-};
+}
+
+exports.expenses = (month, year) => {
+    return new Promise((resolve, reject) => {
+
+        const query = `SELECT e.expense_id, e.amount, c.name AS category, m.name AS paid_by, e.expense_date, e.description, e.split_type FROM expenses e JOIN categories c ON e.category_id = c.category_id JOIN members m ON e.paid_by = m.member_id WHERE MONTH(e.expense_date) = ? AND YEAR(e.expense_date) = ? ORDER BY e.expense_date DESC`;
+
+        db.query(query, [month, year], (err, res) => {
+            if(err)
+                return reject(err);
+
+            resolve(res);
+        });
+    });
+}
+
+console.log(module.exports);

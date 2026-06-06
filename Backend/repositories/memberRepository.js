@@ -23,3 +23,16 @@ exports.getAllActiveMembers = () => {
         });
     });
 };
+
+exports.getMembers = () => {
+    return new Promise((resolve, reject) => {
+        const query = `SELECT member_id, name from members where is_active = TRUE AND name not like "%ADMIN%"`;
+
+        db.query(query, (err, results) => {
+            if(err) 
+                return reject(err);
+            
+            resolve(results);
+        });
+    });
+};

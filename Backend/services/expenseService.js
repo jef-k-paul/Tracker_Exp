@@ -42,3 +42,8 @@ if (splitType === "EQUAL") {
 
 return expenseId;
 };
+
+
+exports.expenses = async (month, year) => {
+    return await expenseRepository.expenses(month, year);
+}
