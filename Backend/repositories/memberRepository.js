@@ -12,3 +12,14 @@ exports.findById = (accessKey) => {
         });
     });
 };
+
+exports.getAllActiveMembers = () => {
+    return new Promise((resolve, reject) => {
+        const query = "SELECT member_id FROM members WHERE is_active = TRUE";
+
+        db.query(query, (err, results) => {
+            if (err) return reject(err);
+            resolve(results);
+        });
+    })
+}
