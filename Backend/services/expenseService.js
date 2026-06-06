@@ -10,8 +10,8 @@ const expenseId = await expenseRepository.insertExpense({amount,categoryId,paidB
   // 2️ Handle splits
 if (splitType === "EQUAL") {
     const members = await memberRepository.getAllActiveMembers();
-
-    const share = amount / members.length;
+    // one negated for admin. to be added.
+    const share = amount / (members.length);
 
     for (let member of members) {
     await expenseRepository.insertSplit({

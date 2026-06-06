@@ -15,11 +15,11 @@ exports.findById = (accessKey) => {
 
 exports.getAllActiveMembers = () => {
     return new Promise((resolve, reject) => {
-        const query = "SELECT member_id FROM members WHERE is_active = TRUE";
+        const query = `SELECT member_id, name FROM members WHERE is_active = TRUE AND name not like "%ADMIN%"`;
 
         db.query(query, (err, results) => {
             if (err) return reject(err);
             resolve(results);
         });
-    })
-}
+    });
+};

@@ -17,21 +17,21 @@ exports.getTotalExpense = (month, year) => {
     });
 };
 
-exports.getTotalExpense = (month, year) => {
+// exports.getTotalExpense = (month, year) => {
 
-    return new Promise((resolve, reject) => {
-        const query = `
-        SELECT SUM(amount) AS total
-        FROM expenses
-        WHERE MONTH(expense_date) = ? AND YEAR(expense_date) = ?
-        `;
+//     return new Promise((resolve, reject) => {
+//         const query = `
+//         SELECT SUM(amount) AS total
+//         FROM expenses
+//         WHERE MONTH(expense_date) = ? AND YEAR(expense_date) = ?
+//         `;
 
-        db.query(query, [month, year], (err, res) => {
-        if (err) return reject(err);
-        resolve(res[0].total || 0);
-        });
-    });
-};
+//         db.query(query, [month, year], (err, res) => {
+//         if (err) return reject(err);
+//         resolve(res[0].total || 0);
+//         });
+//     });
+// };
 
 exports.getSharePerMember = (month, year) => {
 
