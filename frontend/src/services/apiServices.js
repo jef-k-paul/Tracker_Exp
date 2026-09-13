@@ -21,7 +21,11 @@ export const getSummary = (month, year) =>{
 };
 
 export const getExpenses = (month, year) => {
-    return api.get(`/expense?month=${month}&year=${year}`);
+    return api.get(`/expenses?month=${month}&year=${year}`);
+};
+
+export const getSettlements = (month, year) => {
+    return api.get(`/settlements?month=${month}&year=${year}`);
 };
 
 export const getMembers = () => {
@@ -34,6 +38,10 @@ export const getCategories = () => {
 
 export const addExpense = (expense) => {
     return api.post("/expenses", expense);
+};
+
+export const checkDuplicateExpense = (amount, categoryId, date) => {
+    return api.get(`/expenses/check-duplicate?amount=${amount}&categoryId=${categoryId}&date=${date}`);
 };
 
 export default api;

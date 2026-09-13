@@ -43,6 +43,7 @@ for( let member of members) {
     const share = shareObj ? Number(shareObj.total_share) : 0;
 
     result.push({
+      member_id: member.member_id,
       member: member.name,
       paid,
       share,

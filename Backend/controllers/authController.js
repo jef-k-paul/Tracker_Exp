@@ -3,7 +3,7 @@ const authService = require('../services/authServices');
 
 exports.loginWithKey = async (req, res) => {
     try {
-        console.log(req.body);
+        console.log("first req1, Request Body: ", req.body);
         const accessKey = req.body.accessKey;
 
         if(!accessKey){
