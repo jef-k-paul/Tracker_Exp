@@ -6,7 +6,7 @@ exports.findById = (accessKey) => {
 
 
         db.query(query, [accessKey], (err, results) => {
-            if(err) return reject;
+            if(err) return reject(err);
 
             resolve(results[0]); //first object/user
         });

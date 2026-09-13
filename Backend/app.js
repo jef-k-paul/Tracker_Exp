@@ -18,6 +18,5 @@ app.use("/api/summary", summaryRoutes);
 app.use("/api/settlements", settlementRoutes);
 app.use("/api/members", memberRoutes);
 app.use("/api/categories", categoryRoutes);
-app.use("/api/expenses", expenseRoutes);
 
 module.exports = app;
