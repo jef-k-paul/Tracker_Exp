@@ -78,4 +78,14 @@ export const checkDuplicateExpense = (amount, categoryId, date) => {
     return api.get(`/expenses/check-duplicate?amount=${amount}&categoryId=${categoryId}&date=${date}`);
 };
 
+export const getAllTimePaid = (memberId) => {
+    const url = memberId ? `/expenses/all-time-paid?memberId=${memberId}` : `/expenses/all-time-paid`;
+    return api.get(url);
+};
+
+export const getAllTimeShare = (memberId) => {
+    const url = memberId ? `/expenses/all-time-share?memberId=${memberId}` : `/expenses/all-time-share`;
+    return api.get(url);
+};
+
 export default api;
