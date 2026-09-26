@@ -20,9 +20,9 @@ import {
   Stack
 } from "@mui/material";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
-import PaymentIcon from "@mui/icons-material/Payment";
-import PieChartIcon from "@mui/icons-material/PieChart";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
+import FlipPaidCard from "./FlipPaidCard";
+import FlipShareCard from "./FlipShareCard";
 
 const MONTHS = [
   { value: 1, label: "January" },
@@ -146,58 +146,24 @@ const SummaryCard = ({
           </Card>
         </Grid>
 
-        {/* Logged-in User Paid */}
+        {/* Logged-in User Paid (Interactive 3D Flip Card) */}
         <Grid item xs={12} sm={6} md={3}>
-          <Card
-            elevation={3}
-            sx={{
-              borderRadius: 3,
-              background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
-              color: "#ffffff"
-            }}
-          >
-            <CardContent>
-              <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-                <Typography variant="subtitle2" sx={{ opacity: 0.9 }}>
-                  You Paid Out of Pocket
-                </Typography>
-                <PaymentIcon sx={{ color: "#7dd3fc" }} />
-              </Box>
-              <Typography variant="h4" fontWeight="bold">
-                ₹{userPaid.toLocaleString("en-IN")}
-              </Typography>
-              <Typography variant="caption" sx={{ opacity: 0.8 }}>
-                Total contributions made
-              </Typography>
-            </CardContent>
-          </Card>
+          <FlipPaidCard
+            userPaid={userPaid}
+            currentUser={currentUser}
+            selectedMonthLabel={MONTHS.find((m) => m.value === selectedMonth)?.label}
+            selectedYear={selectedYear}
+          />
         </Grid>
 
-        {/* Logged-in User Share */}
+        {/* Logged-in User Share (Interactive 3D Flip Card - Total Share Expense) */}
         <Grid item xs={12} sm={6} md={3}>
-          <Card
-            elevation={3}
-            sx={{
-              borderRadius: 3,
-              background: "linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)",
-              color: "#ffffff"
-            }}
-          >
-            <CardContent>
-              <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-                <Typography variant="subtitle2" sx={{ opacity: 0.9 }}>
-                  Your Fair Share
-                </Typography>
-                <PieChartIcon sx={{ color: "#a5b4fc" }} />
-              </Box>
-              <Typography variant="h4" fontWeight="bold">
-                ₹{userShare.toLocaleString("en-IN")}
-              </Typography>
-              <Typography variant="caption" sx={{ opacity: 0.8 }}>
-                Your calculated obligation
-              </Typography>
-            </CardContent>
-          </Card>
+          <FlipShareCard
+            userShare={userShare}
+            currentUser={currentUser}
+            selectedMonthLabel={MONTHS.find((m) => m.value === selectedMonth)?.label}
+            selectedYear={selectedYear}
+          />
         </Grid>
 
         {/* Logged-in User Net Expense Position */}
