@@ -1,5 +1,5 @@
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { jsPDF } from "jspdf";
+import { autoTable } from "jspdf-autotable";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -7,15 +7,23 @@ const MONTH_NAMES = [
 ];
 
 /**
- * Generates a unified, executive-grade Monthly Family Expense Statement PDF.
- * Includes:
- * 1. Branded Header Banner with period & user identity
- * 2. Executive KPI Summary Cards (Total Spend, Out-of-Pocket, Fair Share, Net Position)
- * 3. Recommended Settlements (Who Pays Whom)
- * 4. Category Spending Breakdown with percentages
- * 5. Complete Itemized Transactions Ledger
+ * Sanitizes input to prevent CSV / Spreadsheet Formula Injection (CWE-1236).
+ * Prepends a single quote if the field begins with =, +, -, @, \t, or \r.
  */
-export const exportMonthlyStatementPDF = ({
+const sanitizeForCSV = (val) => {
+  if (val === null || val === undefined) return '""';
+  let str = String(val);
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
+  return `"${str.replace(/"/g, '""')}"`;
+};
+
+/**
+ * Generates a unified, executive-grade Monthly Family Expense Statement PDF.
+ * Uses named exports from jsPDF & autoTable, and fixes post-render pagination.
+ */
+export const exportMonthlyStatementPDF = async ({
   summary = {},
   expenses = [],
   settlements = [],
@@ -144,7 +152,7 @@ export const exportMonthlyStatementPDF = ({
     const settlementRows = settlements.map((s, idx) => [
       `#${idx + 1}`,
       s.from || "Member",
-      "PAYS",
+      s.status === "CONFIRMED" ? "SETTLED (ACKNOWLEDGED)" : "PAYS",
       s.to || "Member",
       `Rs. ${Number(s.amount).toLocaleString("en-IN")}`
     ]);
@@ -181,7 +189,6 @@ export const exportMonthlyStatementPDF = ({
   doc.text("3. CATEGORY SPENDING BREAKDOWN", 14, currentY);
   currentY += 4;
 
-  // Aggregate category stats
   const categoryMap = {};
   expenses.forEach((item) => {
     const cat = item.category?.trim() || "Uncategorized";
@@ -230,7 +237,6 @@ export const exportMonthlyStatementPDF = ({
   currentY = doc.lastAutoTable.finalY + 8;
 
   // 5. ITEMIZED TRANSACTION LEDGER
-  // Check if we need a new page for the transaction ledger table
   if (currentY > 230) {
     doc.addPage();
     currentY = 16;
@@ -286,19 +292,22 @@ export const exportMonthlyStatementPDF = ({
       6: { cellWidth: 22, halign: "right", fontStyle: "bold", textColor: [79, 70, 229] }
     },
     styles: { fontSize: 8 },
-    margin: { left: 14, right: 14 },
-    didDrawPage: (data) => {
-      // Footer page numbers
-      const pageCount = doc.internal.getNumberOfPages();
-      doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184);
-      doc.text(
-        `Family Expense Tracker • ${monthName} ${selectedYear} • Page ${data.pageNumber} of ${pageCount}`,
-        14,
-        290
-      );
-    }
+    margin: { left: 14, right: 14 }
   });
+
+  // POST-RENDER PAGINATION: Compute exact total pages across all pages and stamp footers accurately
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text(
+      `Family Expense Tracker • ${monthName} ${selectedYear} • Page ${i} of ${totalPages}`,
+      14,
+      290
+    );
+  }
 
   // Save PDF file
   const fileName = `Family_Expense_Statement_${monthName}_${selectedYear}.pdf`;
@@ -306,9 +315,9 @@ export const exportMonthlyStatementPDF = ({
 };
 
 /**
- * Generates and downloads a clean, CSV spreadsheet for budgeting and Excel analysis.
+ * Generates and downloads a clean, formula-injection safe CSV spreadsheet with UTF-8 BOM.
  */
-export const exportExpensesCSV = ({
+export const exportExpensesCSV = async ({
   expenses = [],
   currentUser = {},
   selectedMonth = 1,
@@ -338,29 +347,29 @@ export const exportExpensesCSV = ({
     const userShareAmount = userSplit ? Number(userSplit.share_amount) : 0;
     const dateStr = new Date(exp.expense_date).toISOString().split("T")[0];
 
-    // Escape quotes for CSV
-    const desc = `"${(exp.description || "").replace(/"/g, '""')}"`;
-    const cat = `"${(exp.category || "").replace(/"/g, '""')}"`;
-    const payer = `"${(exp.paid_by || "").replace(/"/g, '""')}"`;
-
     return [
-      exp.expense_id,
-      dateStr,
-      cat,
-      desc,
-      payer,
-      exp.split_type || "EQUAL",
-      Number(exp.amount || 0).toFixed(2),
-      userShareAmount.toFixed(2)
+      sanitizeForCSV(exp.expense_id),
+      sanitizeForCSV(dateStr),
+      sanitizeForCSV(exp.category || ""),
+      sanitizeForCSV(exp.description || ""),
+      sanitizeForCSV(exp.paid_by || ""),
+      sanitizeForCSV(exp.split_type || "EQUAL"),
+      sanitizeForCSV(Number(exp.amount || 0).toFixed(2)),
+      sanitizeForCSV(userShareAmount.toFixed(2))
     ].join(",");
   });
 
-  const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
-  const encodedUri = encodeURI(csvContent);
+  // Include UTF-8 Byte Order Mark (BOM) \uFEFF so Excel correctly detects UTF-8
+  const csvBlob = new Blob(["\uFEFF" + [headers.join(","), ...rows].join("\n")], {
+    type: "text/csv;charset=utf-8;"
+  });
+
+  const url = URL.createObjectURL(csvBlob);
   const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
+  link.setAttribute("href", url);
   link.setAttribute("download", `Family_Expenses_${monthName}_${selectedYear}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 };

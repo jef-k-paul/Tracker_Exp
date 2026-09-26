@@ -103,7 +103,11 @@ class DashboardPage extends Component {
 
     return (
       <>
-        <Navbar exportData={exportData} />
+        <Navbar
+          exportData={exportData}
+          currentUser={user}
+          onSettlementUpdated={() => this.fetchDashboardData(selectedMonth, selectedYear)}
+        />
 
         <Container maxWidth="xl" sx={{ mt: 4, mb: 6 }}>
           {/* Header Banner */}
@@ -151,7 +155,13 @@ class DashboardPage extends Component {
               <Divider sx={{ my: 4 }} />
 
               {/* Settlements Component */}
-              <SettlementCard settlements={settlements} currentUser={user} />
+              <SettlementCard
+                settlements={settlements}
+                currentUser={user}
+                selectedMonth={selectedMonth}
+                selectedYear={selectedYear}
+                onSettlementUpdated={() => this.fetchDashboardData(selectedMonth, selectedYear)}
+              />
 
               <Divider sx={{ my: 4 }} />
 
