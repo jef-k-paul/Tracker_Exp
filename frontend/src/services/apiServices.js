@@ -1,12 +1,46 @@
 import axios from "axios";
 import { API_BASE_URL } from "../utils/constants";
 
-//Create the api base and use it from here to get acces to based url everywhere as api
+//Create the api base and use it from here to get access to based url everywhere as api
 const api = axios.create({
     baseURL : API_BASE_URL
 });
-console.log( "Axios Function create : ",axios.create());
-console.log("Axios create baseURL",axios.create({baseURL : API_BASE_URL}));
+
+// Request interceptor: attach Bearer token to all outgoing API calls
+api.interceptors.request.use(
+    (config) => {
+        let token = localStorage.getItem("token");
+        if (!token) {
+            try {
+                const user = JSON.parse(localStorage.getItem("user") || "{}");
+                token = user.token;
+            } catch (e) {
+                token = null;
+            }
+        }
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+    },
+    (error) => Promise.reject(error)
+);
+
+// Response interceptor: handle 401/403 unauthorized token expiration
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+            // Token missing or expired, clear local storage and redirect to login
+            localStorage.removeItem("user");
+            localStorage.removeItem("token");
+            if (window.location.pathname !== "/") {
+                window.location.href = "/";
+            }
+        }
+        return Promise.reject(error);
+    }
+);
 
 
 // login post call and sending accessKey in payload
