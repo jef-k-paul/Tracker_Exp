@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Grid,
   Card,
@@ -21,8 +21,10 @@ import {
 } from "@mui/material";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
+import BarChartIcon from "@mui/icons-material/BarChart";
 import FlipPaidCard from "./FlipPaidCard";
 import FlipShareCard from "./FlipShareCard";
+import CategoryBreakdownModal from "./CategoryBreakdownModal";
 
 const MONTHS = [
   { value: 1, label: "January" },
@@ -43,12 +45,14 @@ const YEARS = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
 
 const SummaryCard = ({
   summary,
+  expenses = [],
   currentUser,
   selectedMonth,
   selectedYear,
   onMonthChange,
   onYearChange
 }) => {
+  const [openCategoryModal, setOpenCategoryModal] = useState(false);
   const totalExpense = summary?.totalExpense || 0;
   const perPerson = summary?.perPerson || [];
 
@@ -119,29 +123,77 @@ const SummaryCard = ({
 
       {/* Metric Cards Grid */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        {/* Total Family Expense */}
+        {/* Total Family Expense (Clickable - Opens Category Breakdown Modal) */}
         <Grid item xs={12} sm={6} md={3}>
           <Card
             elevation={3}
+            onClick={() => setOpenCategoryModal(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setOpenCategoryModal(true);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Click to view category breakdown modal"
             sx={{
               borderRadius: 3,
               background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
-              color: "#ffffff"
+              color: "#ffffff",
+              cursor: "pointer",
+              height: "100%",
+              minHeight: "165px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              boxSizing: "border-box",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              transition: "transform 0.25s ease, box-shadow 0.25s ease",
+              "&:hover": {
+                transform: "translateY(-4px)",
+                boxShadow: "0 12px 24px -6px rgba(15, 23, 42, 0.6)"
+              },
+              "&:focus-visible": {
+                boxShadow: "0 0 0 3px #38bdf8",
+                outline: "none"
+              }
             }}
           >
-            <CardContent>
-              <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-                <Typography variant="subtitle2" sx={{ opacity: 0.8 }}>
-                  Total Family Spend
+            <CardContent sx={{ pb: "16px !important", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div>
+                <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+                  <Typography variant="subtitle2" sx={{ opacity: 0.85, fontWeight: 600 }}>
+                    Total Family Spend
+                  </Typography>
+                  <AccountBalanceWalletIcon sx={{ color: "#38bdf8" }} />
+                </Box>
+                <Typography variant="h4" fontWeight="bold" sx={{ letterSpacing: "-0.5px" }}>
+                  ₹{totalExpense.toLocaleString("en-IN")}
                 </Typography>
-                <AccountBalanceWalletIcon sx={{ color: "#38bdf8" }} />
+              </div>
+
+              <Box display="flex" alignItems="center" justifyContent="space-between" mt={1}>
+                <Typography variant="caption" sx={{ opacity: 0.75, fontSize: "0.75rem" }}>
+                  For {MONTHS.find((m) => m.value === selectedMonth)?.label} {selectedYear}
+                </Typography>
+                <Chip
+                  icon={<BarChartIcon sx={{ fontSize: "14px !important", color: "#38bdf8 !important" }} />}
+                  label="Breakdown 🔍"
+                  size="small"
+                  sx={{
+                    height: "22px",
+                    fontSize: "0.7rem",
+                    fontWeight: 600,
+                    backgroundColor: "rgba(255, 255, 255, 0.15)",
+                    color: "#ffffff",
+                    backdropFilter: "blur(4px)",
+                    "&:hover": {
+                      backgroundColor: "rgba(255, 255, 255, 0.25)"
+                    }
+                  }}
+                />
               </Box>
-              <Typography variant="h4" fontWeight="bold">
-                ₹{totalExpense.toLocaleString("en-IN")}
-              </Typography>
-              <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                For {MONTHS.find((m) => m.value === selectedMonth)?.label} {selectedYear}
-              </Typography>
             </CardContent>
           </Card>
         </Grid>
@@ -273,6 +325,16 @@ const SummaryCard = ({
           </Table>
         </TableContainer>
       </Paper>
+
+      {/* Category Breakdown Popup Modal */}
+      <CategoryBreakdownModal
+        open={openCategoryModal}
+        onClose={() => setOpenCategoryModal(false)}
+        expenses={expenses}
+        totalExpense={totalExpense}
+        selectedMonthLabel={MONTHS.find((m) => m.value === selectedMonth)?.label}
+        selectedYear={selectedYear}
+      />
     </Box>
   );
 };

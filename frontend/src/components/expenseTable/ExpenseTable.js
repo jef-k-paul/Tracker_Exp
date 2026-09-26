@@ -11,21 +11,53 @@ import {
   Chip,
   Box,
   Tooltip,
-  IconButton
+  IconButton,
+  Button,
+  Stack
 } from "@mui/material";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import TableChartIcon from "@mui/icons-material/TableChart";
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import { exportMonthlyStatementPDF, exportExpensesCSV } from "../../utils/exportUtils";
 
-const ExpenseTable = ({ expenses = [], currentUser, loading = false }) => {
+const ExpenseTable = ({ expenses = [], currentUser, loading = false, exportData }) => {
   const loggedInName = currentUser?.name?.toLowerCase();
 
   return (
     <Paper elevation={3} sx={{ p: 3, borderRadius: 3 }}>
-      <Box display="flex" alignItems="center" mb={2}>
-        <ReceiptLongIcon color="primary" sx={{ mr: 1, fontSize: 28 }} />
-        <Typography variant="h6" fontWeight="bold">
-          Expense Transactions History
-        </Typography>
+      <Box display="flex" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1.5}>
+        <Box display="flex" alignItems="center">
+          <ReceiptLongIcon color="primary" sx={{ mr: 1, fontSize: 28 }} />
+          <Typography variant="h6" fontWeight="bold">
+            Expense Transactions History
+          </Typography>
+        </Box>
+
+        {exportData && expenses.length > 0 && (
+          <Stack direction="row" spacing={1}>
+            <Button
+              size="small"
+              variant="outlined"
+              color="primary"
+              startIcon={<TableChartIcon />}
+              onClick={() => exportExpensesCSV(exportData)}
+              sx={{ borderRadius: 2, textTransform: "none", fontSize: "0.8rem", fontWeight: 600 }}
+            >
+              Export CSV
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              color="primary"
+              startIcon={<PictureAsPdfIcon />}
+              onClick={() => exportMonthlyStatementPDF(exportData)}
+              sx={{ borderRadius: 2, textTransform: "none", fontSize: "0.8rem", fontWeight: 600 }}
+            >
+              Statement (PDF)
+            </Button>
+          </Stack>
+        )}
       </Box>
 
       {expenses.length === 0 ? (

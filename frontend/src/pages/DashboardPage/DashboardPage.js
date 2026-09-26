@@ -92,9 +92,18 @@ class DashboardPage extends Component {
       return null;
     }
 
+    const exportData = {
+      summary,
+      expenses,
+      settlements,
+      currentUser: user,
+      selectedMonth,
+      selectedYear
+    };
+
     return (
       <>
-        <Navbar />
+        <Navbar exportData={exportData} />
 
         <Container maxWidth="xl" sx={{ mt: 4, mb: 6 }}>
           {/* Header Banner */}
@@ -131,6 +140,7 @@ class DashboardPage extends Component {
               {/* Summary Cards & Filters */}
               <SummaryCard
                 summary={summary}
+                expenses={expenses}
                 currentUser={user}
                 selectedMonth={selectedMonth}
                 selectedYear={selectedYear}
@@ -146,7 +156,12 @@ class DashboardPage extends Component {
               <Divider sx={{ my: 4 }} />
 
               {/* Recent Expenses Table */}
-              <ExpenseTable expenses={expenses} currentUser={user} loading={loading} />
+              <ExpenseTable
+                expenses={expenses}
+                currentUser={user}
+                loading={loading}
+                exportData={exportData}
+              />
             </>
           )}
         </Container>
