@@ -41,3 +41,31 @@ exports.checkDuplicate = async (req, res) => {
         res.status(500).json({ message: "Server error checking duplicate" });
     }
 };
+
+exports.getAllTimePaid = async (req, res) => {
+    try {
+        const memberId = req.query.memberId || req.user?.memberId;
+        if (!memberId) {
+            return res.status(400).json({ message: "Member ID is required." });
+        }
+        const total = await expenseService.getAllTimePaid(memberId);
+        res.json({ memberId: Number(memberId), allTimeTotal: total });
+    } catch (err) {
+        console.error("Error fetching all-time paid total:", err);
+        res.status(500).json({ message: "Server error fetching all-time expenses." });
+    }
+};
+
+exports.getAllTimeShare = async (req, res) => {
+    try {
+        const memberId = req.query.memberId || req.user?.memberId;
+        if (!memberId) {
+            return res.status(400).json({ message: "Member ID is required." });
+        }
+        const share = await expenseService.getAllTimeShare(memberId);
+        res.json({ memberId: Number(memberId), allTimeShare: share });
+    } catch (err) {
+        console.error("Error fetching all-time share total:", err);
+        res.status(500).json({ message: "Server error fetching all-time share." });
+    }
+};

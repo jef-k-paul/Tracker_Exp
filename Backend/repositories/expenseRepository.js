@@ -71,3 +71,31 @@ exports.findDuplicateExpense = ({ amount, categoryId, date }) => {
         });
     });
 };
+
+exports.getAllTimePaid = (memberId) => {
+    return new Promise((resolve, reject) => {
+        const query = `
+            SELECT COALESCE(SUM(amount), 0) AS all_time_paid
+            FROM expenses
+            WHERE paid_by = ?
+        `;
+        db.query(query, [memberId], (err, res) => {
+            if (err) return reject(err);
+            resolve(Number(res[0]?.all_time_paid || 0));
+        });
+    });
+};
+
+exports.getAllTimeShare = (memberId) => {
+    return new Promise((resolve, reject) => {
+        const query = `
+            SELECT COALESCE(SUM(share_amount), 0) AS all_time_share
+            FROM expense_splits
+            WHERE member_id = ?
+        `;
+        db.query(query, [memberId], (err, res) => {
+            if (err) return reject(err);
+            resolve(Number(res[0]?.all_time_share || 0));
+        });
+    });
+};
