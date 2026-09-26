@@ -1,11 +1,13 @@
 import React, { Component } from "react";
 import { AppBar, Toolbar, Typography, Button } from "@mui/material";
+import { Link as RouterLink } from "react-router-dom";
 
-    class Navbar extends Component {
+class Navbar extends Component {
     handleLogout = () => {
-        // REMOVE existing logged in user 
+        // Remove authentication items from storage
         localStorage.removeItem("user");
-        // after removing load home page.
+        localStorage.removeItem("token");
+        // Redirect to login page
         window.location.href = "/";
     };
 
@@ -22,14 +24,16 @@ import { AppBar, Toolbar, Typography, Button } from "@mui/material";
             
             <Button
                 color="inherit"
-                href="/dashboard"
+                component={RouterLink}
+                to="/dashboard"
             >
                 Dashboard
             </Button>
 
             <Button
                 color="inherit"
-                href="/add-expense"
+                component={RouterLink}
+                to="/add-expense"
             >
                 Add Expense
             </Button>

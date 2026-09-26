@@ -27,10 +27,18 @@ class AddExpensePage extends Component {
   constructor(props) {
     super(props);
 
+    let user = null;
+    try {
+      user = JSON.parse(localStorage.getItem("user"));
+    } catch (e) {
+      user = null;
+    }
+
     this.state = {
+      user: user,
       amount: "",
       categoryId: "",
-      paidBy: "",
+      paidBy: user?.member_id || user?.memberId || "",
       date: new Date().toISOString().split("T")[0],
       description: "",
       splitType: "EQUAL",
@@ -47,6 +55,11 @@ class AddExpensePage extends Component {
   }
 
   componentDidMount() {
+    if (!this.state.user) {
+      window.location.href = "/";
+      return;
+    }
+
     getMembers()
       .then((response) => {
         this.setState({ members: response.data || [] });
@@ -222,6 +235,10 @@ class AddExpensePage extends Component {
   };
 
   render() {
+    if (!this.state.user) {
+      return null;
+    }
+
     const {
       amount,
       categoryId,

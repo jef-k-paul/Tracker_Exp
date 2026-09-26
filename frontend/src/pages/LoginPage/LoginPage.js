@@ -18,43 +18,60 @@
             super(props);
 
             this.state = {
-            accessKey: "",
-            loading: false,
-            error: ""
+                accessKey: "",
+                loading: false,
+                error: ""
             };
+        }
+
+        componentDidMount() {
+            const userStr = localStorage.getItem("user");
+            if (userStr) {
+                try {
+                    const user = JSON.parse(userStr);
+                    if (user && (user.member_id || user.memberId)) {
+                        window.location.href = "/dashboard";
+                    }
+                } catch (e) {
+                    localStorage.removeItem("user");
+                    localStorage.removeItem("token");
+                }
+            }
         }
 
         handleChange = (event) => {
             this.setState({
-            accessKey: event.target.value
+                accessKey: event.target.value
             });
         };
 
         handleLogin = () => {
-
             this.setState({
-                error : "",
-                loading : true
+                error: "",
+                loading: true
             });
 
             login(this.state.accessKey)
                 .then((response) => {
-
+                    const data = response.data;
                     localStorage.setItem(
                         "user",
-                        JSON.stringify(response.data)
+                        JSON.stringify(data)
                     );
+                    if (data.token) {
+                        localStorage.setItem("token", data.token);
+                    }
 
                     window.location.href = "/dashboard";
                 })
-                .catch(() => {
-                    
+                .catch((error) => {
+                    const errMsg = error.response?.data?.message || "Invalid Access Key";
                     this.setState({
-                        error: "Invalid Access Key",
-                        loading : false
+                        error: errMsg,
+                        loading: false
                     });
                 });
-        }
+        };
 
         render() {
             return (

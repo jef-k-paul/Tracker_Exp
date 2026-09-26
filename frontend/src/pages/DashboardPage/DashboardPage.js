@@ -18,7 +18,12 @@ class DashboardPage extends Component {
   constructor(props) {
     super(props);
 
-    const user = JSON.parse(localStorage.getItem("user"));
+    let user = null;
+    try {
+      user = JSON.parse(localStorage.getItem("user"));
+    } catch (e) {
+      user = null;
+    }
     const now = new Date();
 
     this.state = {
@@ -82,6 +87,10 @@ class DashboardPage extends Component {
   render() {
     const { user, selectedMonth, selectedYear, summary, settlements, expenses, loading, error } =
       this.state;
+
+    if (!user) {
+      return null;
+    }
 
     return (
       <>
