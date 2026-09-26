@@ -9,7 +9,8 @@ import {
   ListItemIcon,
   ListItemText,
   Box,
-  Tooltip
+  Tooltip,
+  CircularProgress
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
@@ -17,10 +18,22 @@ import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import TableChartIcon from "@mui/icons-material/TableChart";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import { exportMonthlyStatementPDF, exportExpensesCSV } from "../../utils/exportUtils";
+import NotificationBell from "./NotificationBell";
 
-const Navbar = ({ exportData }) => {
+const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
   const [anchorEl, setAnchorEl] = useState(null);
+  const [isExporting, setIsExporting] = useState(false);
   const openMenu = Boolean(anchorEl);
+
+  // Fallback to localStorage if currentUser not passed directly
+  let user = currentUser;
+  if (!user) {
+    try {
+      user = JSON.parse(localStorage.getItem("user") || "null");
+    } catch (e) {
+      user = null;
+    }
+  }
 
   const handleOpenExport = (event) => {
     setAnchorEl(event.currentTarget);
@@ -30,17 +43,29 @@ const Navbar = ({ exportData }) => {
     setAnchorEl(null);
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     handleCloseExport();
-    if (exportData) {
-      exportMonthlyStatementPDF(exportData);
+    if (!exportData || isExporting) return;
+    try {
+      setIsExporting(true);
+      await exportMonthlyStatementPDF(exportData);
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+    } finally {
+      setIsExporting(false);
     }
   };
 
-  const handleDownloadCSV = () => {
+  const handleDownloadCSV = async () => {
     handleCloseExport();
-    if (exportData) {
-      exportExpensesCSV(exportData);
+    if (!exportData || isExporting) return;
+    try {
+      setIsExporting(true);
+      await exportExpensesCSV(exportData);
+    } catch (err) {
+      console.error("CSV generation failed:", err);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -77,7 +102,14 @@ const Navbar = ({ exportData }) => {
                 <Button
                   color="inherit"
                   onClick={handleOpenExport}
-                  endIcon={<KeyboardArrowDownIcon />}
+                  disabled={isExporting}
+                  endIcon={
+                    isExporting ? (
+                      <CircularProgress size={16} color="inherit" />
+                    ) : (
+                      <KeyboardArrowDownIcon />
+                    )
+                  }
                   startIcon={<FileDownloadIcon />}
                   sx={{
                     backgroundColor: "rgba(255, 255, 255, 0.1)",
@@ -88,7 +120,7 @@ const Navbar = ({ exportData }) => {
                     }
                   }}
                 >
-                  Export
+                  {isExporting ? "Exporting..." : "Export"}
                 </Button>
               </Tooltip>
 
@@ -133,6 +165,14 @@ const Navbar = ({ exportData }) => {
                 </MenuItem>
               </Menu>
             </>
+          )}
+
+          {/* Handshake Settlement Notifications */}
+          {user && (
+            <NotificationBell
+              currentUser={user}
+              onSettlementUpdated={onSettlementUpdated}
+            />
           )}
 
           <Button color="inherit" onClick={handleLogout}>

@@ -62,6 +62,26 @@ export const getSettlements = (month, year) => {
     return api.get(`/settlements?month=${month}&year=${year}`);
 };
 
+export const initiateSettlement = (payload) => {
+    return api.post("/settlements/initiate", payload);
+};
+
+export const confirmSettlement = (settlementId) => {
+    return api.put(`/settlements/${settlementId}/confirm`);
+};
+
+export const rejectSettlement = (settlementId) => {
+    return api.put(`/settlements/${settlementId}/reject`);
+};
+
+export const getPendingSettlements = () => {
+    return api.get("/settlements/pending");
+};
+
+export const getPendingSettlementsCount = () => {
+    return api.get("/settlements/pending-count");
+};
+
 export const getMembers = () => {
     return api.get("/members");
 };

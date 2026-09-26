@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Paper,
   Typography,
@@ -13,7 +13,8 @@ import {
   Tooltip,
   IconButton,
   Button,
-  Stack
+  Stack,
+  CircularProgress
 } from "@mui/material";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
@@ -22,7 +23,32 @@ import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import { exportMonthlyStatementPDF, exportExpensesCSV } from "../../utils/exportUtils";
 
 const ExpenseTable = ({ expenses = [], currentUser, loading = false, exportData }) => {
+  const [exportingType, setExportingType] = useState(null); // 'pdf' | 'csv' | null
   const loggedInName = currentUser?.name?.toLowerCase();
+
+  const handleDownloadCSV = async () => {
+    if (!exportData || exportingType) return;
+    try {
+      setExportingType("csv");
+      await exportExpensesCSV(exportData);
+    } catch (err) {
+      console.error("CSV export failed:", err);
+    } finally {
+      setExportingType(null);
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!exportData || exportingType) return;
+    try {
+      setExportingType("pdf");
+      await exportMonthlyStatementPDF(exportData);
+    } catch (err) {
+      console.error("PDF export failed:", err);
+    } finally {
+      setExportingType(null);
+    }
+  };
 
   return (
     <Paper elevation={3} sx={{ p: 3, borderRadius: 3 }}>
@@ -40,21 +66,35 @@ const ExpenseTable = ({ expenses = [], currentUser, loading = false, exportData 
               size="small"
               variant="outlined"
               color="primary"
-              startIcon={<TableChartIcon />}
-              onClick={() => exportExpensesCSV(exportData)}
+              disabled={Boolean(exportingType)}
+              startIcon={
+                exportingType === "csv" ? (
+                  <CircularProgress size={14} color="inherit" />
+                ) : (
+                  <TableChartIcon />
+                )
+              }
+              onClick={handleDownloadCSV}
               sx={{ borderRadius: 2, textTransform: "none", fontSize: "0.8rem", fontWeight: 600 }}
             >
-              Export CSV
+              {exportingType === "csv" ? "Exporting..." : "Export CSV"}
             </Button>
             <Button
               size="small"
               variant="contained"
               color="primary"
-              startIcon={<PictureAsPdfIcon />}
-              onClick={() => exportMonthlyStatementPDF(exportData)}
+              disabled={Boolean(exportingType)}
+              startIcon={
+                exportingType === "pdf" ? (
+                  <CircularProgress size={14} color="inherit" />
+                ) : (
+                  <PictureAsPdfIcon />
+                )
+              }
+              onClick={handleDownloadPDF}
               sx={{ borderRadius: 2, textTransform: "none", fontSize: "0.8rem", fontWeight: 600 }}
             >
-              Statement (PDF)
+              {exportingType === "pdf" ? "Generating..." : "Statement (PDF)"}
             </Button>
           </Stack>
         )}

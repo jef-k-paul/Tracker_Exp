@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Grid,
   Card,
   CardContent,
   Typography,
@@ -17,7 +16,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Stack
+  Stack,
+  Tooltip
 } from "@mui/material";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
@@ -121,10 +121,36 @@ const SummaryCard = ({
         </Stack>
       </Paper>
 
-      {/* Metric Cards Grid */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      {/* Metric Cards: 4-Column Grid on Desktop, Smooth Horizontal Snap Carousel on Mobile */}
+      <Box
+        sx={{
+          mb: 3,
+          display: { xs: "flex", md: "grid" },
+          gridTemplateColumns: { md: "repeat(4, 1fr)" },
+          gap: { xs: 2, md: 3 },
+          overflowX: { xs: "auto", md: "visible" },
+          scrollSnapType: { xs: "x mandatory", md: "none" },
+          pb: { xs: 1.5, md: 0 },
+          pt: 0.5,
+          px: 0.5,
+          scrollbarWidth: "thin",
+          "&::-webkit-scrollbar": {
+            height: "5px"
+          },
+          "&::-webkit-scrollbar-thumb": {
+            backgroundColor: "#cbd5e1",
+            borderRadius: "10px"
+          }
+        }}
+      >
         {/* Total Family Expense (Clickable - Opens Category Breakdown Modal) */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Box
+          sx={{
+            flex: { xs: "0 0 82%", sm: "0 0 45%", md: "unset" },
+            minWidth: { xs: "270px", sm: "280px", md: "unset" },
+            scrollSnapAlign: "start"
+          }}
+        >
           <Card
             elevation={3}
             onClick={() => setOpenCategoryModal(true)}
@@ -196,30 +222,48 @@ const SummaryCard = ({
               </Box>
             </CardContent>
           </Card>
-        </Grid>
+        </Box>
 
         {/* Logged-in User Paid (Interactive 3D Flip Card) */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Box
+          sx={{
+            flex: { xs: "0 0 82%", sm: "0 0 45%", md: "unset" },
+            minWidth: { xs: "270px", sm: "280px", md: "unset" },
+            scrollSnapAlign: "start"
+          }}
+        >
           <FlipPaidCard
             userPaid={userPaid}
             currentUser={currentUser}
             selectedMonthLabel={MONTHS.find((m) => m.value === selectedMonth)?.label}
             selectedYear={selectedYear}
           />
-        </Grid>
+        </Box>
 
         {/* Logged-in User Share (Interactive 3D Flip Card - Total Share Expense) */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Box
+          sx={{
+            flex: { xs: "0 0 82%", sm: "0 0 45%", md: "unset" },
+            minWidth: { xs: "270px", sm: "280px", md: "unset" },
+            scrollSnapAlign: "start"
+          }}
+        >
           <FlipShareCard
             userShare={userShare}
             currentUser={currentUser}
             selectedMonthLabel={MONTHS.find((m) => m.value === selectedMonth)?.label}
             selectedYear={selectedYear}
           />
-        </Grid>
+        </Box>
 
         {/* Logged-in User Net Expense Position */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Box
+          sx={{
+            flex: { xs: "0 0 82%", sm: "0 0 45%", md: "unset" },
+            minWidth: { xs: "270px", sm: "280px", md: "unset" },
+            scrollSnapAlign: "start"
+          }}
+        >
           <Card
             elevation={3}
             sx={{
@@ -230,7 +274,11 @@ const SummaryCard = ({
                   : userBalance < 0
                   ? "linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)"
                   : "linear-gradient(135deg, #475569 0%, #334155 100%)",
-              color: "#ffffff"
+              color: "#ffffff",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between"
             }}
           >
             <CardContent>
@@ -250,10 +298,16 @@ const SummaryCard = ({
                   ? "You owe money ⚠️"
                   : "You are fully settled up 👍"}
               </Typography>
+              {Boolean(userStat.settled_paid || userStat.settled_received) && (
+                <Typography variant="caption" display="block" sx={{ opacity: 0.8, fontSize: "0.7rem", mt: 0.5 }}>
+                  Reconciled: {userStat.settled_paid > 0 ? `+₹${userStat.settled_paid} repaid` : ""}{" "}
+                  {userStat.settled_received > 0 ? `-₹${userStat.settled_received} received` : ""}
+                </Typography>
+              )}
             </CardContent>
           </Card>
-        </Grid>
-      </Grid>
+        </Box>
+      </Box>
 
       {/* Per Person Breakdown Table */}
       <Paper elevation={3} sx={{ p: 2, borderRadius: 3 }}>
@@ -286,6 +340,7 @@ const SummaryCard = ({
                   (loggedInName && p.member && p.member.trim().toLowerCase() === loggedInName)
                 );
                 const bal = Number(p.balance);
+                const hasSettlements = Boolean(p.settled_paid || p.settled_received);
 
                 return (
                   <TableRow
@@ -307,7 +362,18 @@ const SummaryCard = ({
                         color: bal > 0 ? "success.main" : bal < 0 ? "error.main" : "text.secondary"
                       }}
                     >
-                      {bal > 0 ? `+₹${bal}` : bal < 0 ? `-₹${Math.abs(bal)}` : "₹0"}
+                      {hasSettlements ? (
+                        <Tooltip
+                          title={`Raw expense balance: ₹${p.raw_balance > 0 ? "+" : ""}${p.raw_balance} | Repaid: ₹${p.settled_paid || 0} | Received: ₹${p.settled_received || 0}`}
+                          arrow
+                        >
+                          <span style={{ borderBottom: "1px dotted #94a3b8", cursor: "help" }}>
+                            {bal > 0 ? `+₹${bal}` : bal < 0 ? `-₹${Math.abs(bal)}` : "₹0"}
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        bal > 0 ? `+₹${bal}` : bal < 0 ? `-₹${Math.abs(bal)}` : "₹0"
+                      )}
                     </TableCell>
                     <TableCell align="center">
                       {bal > 0 ? (
