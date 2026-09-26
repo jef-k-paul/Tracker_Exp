@@ -131,3 +131,11 @@ exports.checkDuplicate = async (amount, categoryId, date) => {
     if (!amount || !categoryId || !date) return null;
     return await expenseRepository.findDuplicateExpense({ amount, categoryId, date });
 };
+
+exports.getAllTimePaid = async (memberId) => {
+    return await expenseRepository.getAllTimePaid(memberId);
+};
+
+exports.getAllTimeShare = async (memberId) => {
+    return await expenseRepository.getAllTimeShare(memberId);
+};

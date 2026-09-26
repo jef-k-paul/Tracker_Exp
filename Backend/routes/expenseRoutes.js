@@ -8,6 +8,8 @@ const { authenticateToken } = require("../middlewares/authMiddleware");
 router.use(authenticateToken);
 
 router.post("/", expenseController.addExpense);
+router.get("/all-time-paid", expenseController.getAllTimePaid);
+router.get("/all-time-share", expenseController.getAllTimeShare);
 router.get("/check-duplicate", expenseController.checkDuplicate);
 router.get("/", expenseController.expenses);
 
