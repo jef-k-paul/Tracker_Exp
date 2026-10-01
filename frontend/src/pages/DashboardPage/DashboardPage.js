@@ -121,12 +121,26 @@ class DashboardPage extends Component {
               color: "#ffffff"
             }}
           >
-            <Typography variant="h4" fontWeight="bold" gutterBottom>
-              Welcome back, {user?.name || "User"} 👋
-            </Typography>
-            <Typography variant="body1" sx={{ opacity: 0.8 }}>
-              Here is your family expense breakdown, settlement balances, and transaction history.
-            </Typography>
+            <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
+              <Box>
+                <Typography variant="h4" fontWeight="bold" gutterBottom>
+                  Welcome back, {user?.name || "User"} 👋
+                </Typography>
+                <Typography variant="body1" sx={{ opacity: 0.8 }}>
+                  Here is your {user?.circle_name ? `${user.circle_name}` : "family"} expense breakdown, settlement balances, and transaction history.
+                </Typography>
+              </Box>
+              {user?.circle_name && (
+                <Box sx={{ bgcolor: "rgba(255,255,255,0.08)", px: 2.5, py: 1.2, borderRadius: 2, border: "1px solid rgba(255,255,255,0.15)" }}>
+                  <Typography variant="caption" sx={{ color: "#94a3b8", display: "block", textTransform: "uppercase", letterSpacing: 1, fontWeight: 700 }}>
+                    Circle: {user.circle_name}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: "#38bdf8", fontWeight: "bold" }}>
+                    Family Code: {user.family_code || "N/A"}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
           </Paper>
 
           {error && (

@@ -1,128 +1,819 @@
-    import React, {Component} from "react";
-    import {
-        Container,
-        Paper,
-        Typography,
-        TextField,
-        Button,
-        Alert
-    } from "@mui/material";
+import React, { Component } from "react";
+import {
+  Container,
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  Alert,
+  Box,
+  Tabs,
+  Tab,
+  InputAdornment,
+  IconButton,
+  CircularProgress,
+  Stack,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent
+} from "@mui/material";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import PersonAddOutlinedIcon from "@mui/icons-material/PersonAddOutlined";
+import MarkEmailReadOutlinedIcon from "@mui/icons-material/MarkEmailReadOutlined";
+import GroupsIcon from "@mui/icons-material/Groups";
+import GroupAddIcon from "@mui/icons-material/GroupAdd";
+import VpnKeyIcon from "@mui/icons-material/VpnKey";
+import {
+  loginWithCredentials,
+  login as loginWithKey,
+  registerUser,
+  forgotPassword,
+  resetPassword,
+  joinCircle,
+  createCircle
+} from "../../services/apiServices";
 
+class LoginPage extends Component {
+  constructor(props) {
+    super(props);
 
-    import { login } from "../../services/apiServices";
+    this.state = {
+      // 0: Sign In, 1: Register, 2: Forgot Password, 3: Legacy Key Login
+      activeTab: 0,
 
+      // Form inputs
+      email: "",
+      password: "",
+      name: "",
+      showPassword: false,
+      accessKey: "",
 
-    class LoginPage extends Component {
+      // Password Reset with OTP
+      otpSent: false,
+      otpCode: "",
+      newPassword: "",
+      showNewPassword: false,
 
-        constructor(props) {
-            super(props);
+      // Post-auth Circle Onboarding (if user has 0 circles)
+      showCircleModal: false,
+      circleModalTab: 0, // 0: Join Circle, 1: Create Circle
+      familyCodeToJoin: "",
+      circleNameToCreate: "",
+      authUserData: null,
 
-            this.state = {
-                accessKey: "",
-                loading: false,
-                error: ""
-            };
+      // UI states
+      loading: false,
+      error: "",
+      successMsg: ""
+    };
+  }
+
+  componentDidMount() {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        if (user && (user.member_id || user.memberId || user.userId)) {
+          window.location.href = "/dashboard";
         }
+      } catch (e) {
+        localStorage.removeItem("user");
+        localStorage.removeItem("token");
+      }
+    }
+  }
 
-        componentDidMount() {
-            const userStr = localStorage.getItem("user");
-            if (userStr) {
-                try {
-                    const user = JSON.parse(userStr);
-                    if (user && (user.member_id || user.memberId)) {
-                        window.location.href = "/dashboard";
-                    }
-                } catch (e) {
-                    localStorage.removeItem("user");
-                    localStorage.removeItem("token");
-                }
-            }
-        }
+  handleTabChange = (event, newValue) => {
+    this.setState({
+      activeTab: newValue,
+      error: "",
+      successMsg: ""
+    });
+  };
 
-        handleChange = (event) => {
-            this.setState({
-                accessKey: event.target.value
-            });
-        };
+  handleChange = (field) => (event) => {
+    this.setState({ [field]: event.target.value });
+  };
 
-        handleLogin = () => {
-            this.setState({
-                error: "",
-                loading: true
-            });
+  handleToggleShowPassword = () => {
+    this.setState((prev) => ({ showPassword: !prev.showPassword }));
+  };
 
-            login(this.state.accessKey)
-                .then((response) => {
-                    const data = response.data;
-                    localStorage.setItem(
-                        "user",
-                        JSON.stringify(data)
-                    );
-                    if (data.token) {
-                        localStorage.setItem("token", data.token);
-                    }
+  handleToggleShowNewPassword = () => {
+    this.setState((prev) => ({ showNewPassword: !prev.showNewPassword }));
+  };
 
-                    window.location.href = "/dashboard";
-                })
-                .catch((error) => {
-                    const errMsg = error.response?.data?.message || "Invalid Access Key";
-                    this.setState({
-                        error: errMsg,
-                        loading: false
-                    });
-                });
-        };
+  // Quick fill helper for testing
+  handleQuickFill = (email, password) => {
+    this.setState({ email, password, error: "", successMsg: "" });
+  };
 
-        render() {
-            return (
-            <Container maxWidth="sm">
+  // Process login success
+  handleAuthSuccess = (data) => {
+    localStorage.setItem("user", JSON.stringify(data.user || data));
+    if (data.token) {
+      localStorage.setItem("token", data.token);
+    }
 
-                <Paper
-                elevation={3}
-                style={{
-                    padding: "30px",
-                    marginTop: "100px",
-                    textAlign: "center"
-                }}
-                >
+    // Check if user belongs to at least one circle
+    const circles = data.circles || [];
+    if (circles.length === 0 && !data.activeCircle && !data.user?.circle_id) {
+      // User has no circle yet, prompt them to Join or Create a Circle
+      this.setState({
+        showCircleModal: true,
+        authUserData: data,
+        loading: false
+      });
+    } else {
+      // User has a circle, proceed to dashboard
+      window.location.href = "/dashboard";
+    }
+  };
 
-                <Typography
-                    variant="h4"
-                    gutterBottom
-                >
-                    Family Expense Tracker
-                </Typography>
+  // 1. Handle Sign In (Email + Password / PIN)
+  handleSignIn = (e) => {
+    if (e) e.preventDefault();
+    const { email, password } = this.state;
 
+    if (!email.trim() || !password) {
+      this.setState({ error: "Please enter your email and password / PIN." });
+      return;
+    }
 
-                {this.state.error && (
-                <Alert severity="error">
-                {this.state.error}
-                </Alert>
-                )}
-                
-                <TextField
-                    fullWidth
-                    label="Access Key"
-                    value={this.state.accessKey}
-                    onChange={this.handleChange}
-                    margin="normal"
-                />
+    this.setState({ error: "", successMsg: "", loading: true });
 
-            <Button
-                variant="contained"
-                fullWidth
-                onClick={this.handleLogin}
-                disabled={this.state.loading}
-                style={{ marginTop: "20px" }}
+    loginWithCredentials({
+      email: email.trim(),
+      password
+    })
+      .then((res) => {
+        this.handleAuthSuccess(res.data);
+      })
+      .catch((err) => {
+        const msg = err.response?.data?.message || "Invalid credentials. Please try again.";
+        this.setState({ error: msg, loading: false });
+      });
+  };
+
+  // 2. Handle User Registration
+  handleRegister = (e) => {
+    if (e) e.preventDefault();
+    const { name, email, password } = this.state;
+
+    if (!name.trim()) {
+      this.setState({ error: "Please enter your full name." });
+      return;
+    }
+    if (!email.trim() || !email.includes("@")) {
+      this.setState({ error: "Please provide a valid email address." });
+      return;
+    }
+    if (!password || password.length < 4) {
+      this.setState({ error: "Password / PIN must be at least 4 characters." });
+      return;
+    }
+
+    this.setState({ error: "", successMsg: "", loading: true });
+
+    registerUser({
+      name: name.trim(),
+      email: email.trim(),
+      password
+    })
+      .then((res) => {
+        this.handleAuthSuccess(res.data);
+      })
+      .catch((err) => {
+        const msg = err.response?.data?.message || "Registration failed. Please try again.";
+        this.setState({ error: msg, loading: false });
+      });
+  };
+
+  // 3. Request Password Reset OTP
+  handleRequestOtp = (e) => {
+    if (e) e.preventDefault();
+    const { email } = this.state;
+
+    if (!email.trim() || !email.includes("@")) {
+      this.setState({ error: "Please enter a valid email address." });
+      return;
+    }
+
+    this.setState({ error: "", successMsg: "", loading: true });
+
+    forgotPassword(email.trim())
+      .then((res) => {
+        this.setState({
+          otpSent: true,
+          successMsg: res.data?.message || "6-digit OTP code sent! Check your inbox (or dev console).",
+          loading: false
+        });
+      })
+      .catch((err) => {
+        const msg = err.response?.data?.message || "Failed to send reset code. Please check email.";
+        this.setState({ error: msg, loading: false });
+      });
+  };
+
+  // 4. Verify OTP and Reset Password
+  handleResetPassword = (e) => {
+    if (e) e.preventDefault();
+    const { email, otpCode, newPassword } = this.state;
+
+    if (!otpCode.trim() || otpCode.trim().length !== 6) {
+      this.setState({ error: "Please enter the 6-digit verification code." });
+      return;
+    }
+    if (!newPassword || newPassword.length < 4) {
+      this.setState({ error: "New password / PIN must be at least 4 characters." });
+      return;
+    }
+
+    this.setState({ error: "", successMsg: "", loading: true });
+
+    resetPassword({
+      email: email.trim(),
+      otp: otpCode.trim(),
+      newPassword
+    })
+      .then((res) => {
+        this.setState({
+          activeTab: 0,
+          otpSent: false,
+          password: "",
+          otpCode: "",
+          newPassword: "",
+          successMsg: res.data?.message || "Password reset successful! Please sign in.",
+          loading: false
+        });
+      })
+      .catch((err) => {
+        const msg = err.response?.data?.message || "Reset failed. Please check OTP code.";
+        this.setState({ error: msg, loading: false });
+      });
+  };
+
+  // 5. Handle Legacy Access Key Login (KEY1-KEY4)
+  handleLegacyLogin = (e) => {
+    if (e) e.preventDefault();
+    const { accessKey } = this.state;
+
+    if (!accessKey.trim()) {
+      this.setState({ error: "Please enter your Access ID." });
+      return;
+    }
+
+    this.setState({ error: "", loading: true });
+
+    loginWithKey(accessKey.trim())
+      .then((res) => {
+        this.handleAuthSuccess(res.data);
+      })
+      .catch((err) => {
+        const msg = err.response?.data?.message || "Invalid Access ID.";
+        this.setState({ error: msg, loading: false });
+      });
+  };
+
+  // 6. Post-Auth Modal: Join Circle
+  handleModalJoinCircle = () => {
+    const { familyCodeToJoin } = this.state;
+    if (!familyCodeToJoin.trim()) {
+      this.setState({ error: "Please enter an Invite Code." });
+      return;
+    }
+
+    this.setState({ loading: true, error: "" });
+
+    joinCircle({ familyCode: familyCodeToJoin.trim() })
+      .then((res) => {
+        const data = res.data;
+        localStorage.setItem("user", JSON.stringify(data.user));
+        if (data.token) localStorage.setItem("token", data.token);
+        window.location.href = "/dashboard";
+      })
+      .catch((err) => {
+        const msg = err.response?.data?.message || "Failed to join circle.";
+        this.setState({ error: msg, loading: false });
+      });
+  };
+
+  // 7. Post-Auth Modal: Create Circle
+  handleModalCreateCircle = () => {
+    const { circleNameToCreate } = this.state;
+    if (!circleNameToCreate.trim()) {
+      this.setState({ error: "Please enter a Circle / Family name." });
+      return;
+    }
+
+    this.setState({ loading: true, error: "" });
+
+    createCircle({ circleName: circleNameToCreate.trim() })
+      .then((res) => {
+        const data = res.data;
+        localStorage.setItem("user", JSON.stringify(data.user));
+        if (data.token) localStorage.setItem("token", data.token);
+        window.location.href = "/dashboard";
+      })
+      .catch((err) => {
+        const msg = err.response?.data?.message || "Failed to create circle.";
+        this.setState({ error: msg, loading: false });
+      });
+  };
+
+  render() {
+    const {
+      activeTab,
+      email,
+      password,
+      name,
+      showPassword,
+      accessKey,
+      otpSent,
+      otpCode,
+      newPassword,
+      showNewPassword,
+      showCircleModal,
+      circleModalTab,
+      familyCodeToJoin,
+      circleNameToCreate,
+      loading,
+      error,
+      successMsg
+    } = this.state;
+
+    return (
+      <Container maxWidth="sm" sx={{ py: { xs: 4, md: 8 } }}>
+        <Paper
+          elevation={4}
+          sx={{
+            p: { xs: 3, sm: 4 },
+            borderRadius: 3.5,
+            textAlign: "center",
+            background: "#ffffff",
+            border: "1px solid rgba(226, 232, 240, 0.8)"
+          }}
+        >
+          {/* Header Branding */}
+          <Box display="flex" justifyContent="center" alignItems="center" mb={1}>
+            <Box
+              sx={{
+                width: 48,
+                height: 48,
+                borderRadius: "50%",
+                background: "linear-gradient(135deg, #0f172a 0%, #38bdf8 100%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#ffffff",
+                mr: 1.5
+              }}
             >
-                {/* Login */}{this.state.loading ? "Logging In..." : "Login"}
-            </Button>
+              <GroupsIcon fontSize="medium" />
+            </Box>
+            <Typography variant="h5" fontWeight="bold" sx={{ letterSpacing: "-0.5px" }}>
+              Family Expense Tracker
+            </Typography>
+          </Box>
 
-            </Paper>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Secure personal accounts, family circles & multi-tenant expense tracking
+          </Typography>
 
-        </Container>
-        );
-    }
-    }
+          {/* Navigation Tabs */}
+          <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
+            <Tabs
+              value={activeTab}
+              onChange={this.handleTabChange}
+              variant="fullWidth"
+              textColor="primary"
+              indicatorColor="primary"
+            >
+              <Tab
+                icon={<LockOutlinedIcon fontSize="small" />}
+                iconPosition="start"
+                label="Sign In"
+                sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
+              />
+              <Tab
+                icon={<PersonAddOutlinedIcon fontSize="small" />}
+                iconPosition="start"
+                label="Register"
+                sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
+              />
+              <Tab
+                icon={<MarkEmailReadOutlinedIcon fontSize="small" />}
+                iconPosition="start"
+                label="Reset OTP"
+                sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
+              />
+              <Tab
+                icon={<VpnKeyIcon fontSize="small" />}
+                iconPosition="start"
+                label="Access Key"
+                sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
+              />
+            </Tabs>
+          </Box>
 
-    export default LoginPage;
+          {/* Alerts */}
+          {error && (
+            <Alert severity="error" sx={{ mb: 2.5, textAlign: "left" }}>
+              {error}
+            </Alert>
+          )}
+
+          {successMsg && (
+            <Alert severity="success" sx={{ mb: 2.5, textAlign: "left" }}>
+              {successMsg}
+            </Alert>
+          )}
+
+          {/* TAB 0: SIGN IN */}
+          {activeTab === 0 && (
+            <Box component="form" onSubmit={this.handleSignIn}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: "left" }}>
+                Sign in with your email and password or 6-digit PIN:
+              </Typography>
+
+              <TextField
+                fullWidth
+                label="Email Address"
+                variant="outlined"
+                type="email"
+                value={email}
+                onChange={this.handleChange("email")}
+                placeholder="e.g. dad@paul.com"
+                required
+                sx={{ mb: 2.5 }}
+              />
+
+              <TextField
+                fullWidth
+                label="Password / PIN"
+                variant="outlined"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={this.handleChange("password")}
+                placeholder="Enter password or 6-digit PIN"
+                required
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton onClick={this.handleToggleShowPassword} edge="end" size="small">
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }}
+                sx={{ mb: 2 }}
+              />
+
+              <Box display="flex" justifyContent="flex-end" mb={2}>
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={() => this.setState({ activeTab: 2, error: "", successMsg: "" })}
+                  sx={{ textTransform: "none", fontSize: "0.82rem", color: "#0284c7" }}
+                >
+                  Forgot password? Reset with OTP
+                </Button>
+              </Box>
+
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                size="large"
+                disabled={loading}
+                sx={{
+                  py: 1.4,
+                  fontWeight: "bold",
+                  borderRadius: 2,
+                  background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+                  "&:hover": { background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)" }
+                }}
+              >
+                {loading ? <CircularProgress size={24} color="inherit" /> : "Sign In"}
+              </Button>
+
+              {/* Quick Fill Test Accounts */}
+              <Box mt={3} p={1.5} sx={{ bgcolor: "#f8fafc", borderRadius: 2, border: "1px dashed #cbd5e1" }}>
+                <Typography variant="caption" color="text.secondary" display="block" mb={1} fontWeight={600}>
+                  Quick Fill Test Accounts (Password: family123):
+                </Typography>
+                <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">
+                  <Chip
+                    label="Dad (Admin)"
+                    size="small"
+                    clickable
+                    color="primary"
+                    variant="outlined"
+                    onClick={() => this.handleQuickFill("dad@paul.com", "family123")}
+                  />
+                  <Chip
+                    label="Mom"
+                    size="small"
+                    clickable
+                    color="secondary"
+                    variant="outlined"
+                    onClick={() => this.handleQuickFill("mom@paul.com", "family123")}
+                  />
+                  <Chip
+                    label="Son"
+                    size="small"
+                    clickable
+                    color="info"
+                    variant="outlined"
+                    onClick={() => this.handleQuickFill("son@paul.com", "family123")}
+                  />
+                  <Chip
+                    label="Sister"
+                    size="small"
+                    clickable
+                    color="success"
+                    variant="outlined"
+                    onClick={() => this.handleQuickFill("sister@paul.com", "family123")}
+                  />
+                </Stack>
+              </Box>
+            </Box>
+          )}
+
+          {/* TAB 1: REGISTER */}
+          {activeTab === 1 && (
+            <Box component="form" onSubmit={this.handleRegister}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: "left" }}>
+                Create your individual personal account:
+              </Typography>
+
+              <TextField
+                fullWidth
+                label="Full Name"
+                variant="outlined"
+                value={name}
+                onChange={this.handleChange("name")}
+                placeholder="e.g. John Doe"
+                required
+                sx={{ mb: 2 }}
+              />
+
+              <TextField
+                fullWidth
+                label="Email Address"
+                variant="outlined"
+                type="email"
+                value={email}
+                onChange={this.handleChange("email")}
+                placeholder="e.g. john@example.com"
+                required
+                sx={{ mb: 2 }}
+              />
+
+              <TextField
+                fullWidth
+                label="Password / 6-Digit PIN"
+                variant="outlined"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={this.handleChange("password")}
+                placeholder="Min 4 characters or 6-digit PIN"
+                required
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton onClick={this.handleToggleShowPassword} edge="end" size="small">
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }}
+                sx={{ mb: 3 }}
+              />
+
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                size="large"
+                disabled={loading}
+                sx={{
+                  py: 1.4,
+                  fontWeight: "bold",
+                  borderRadius: 2,
+                  background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
+                  "&:hover": { background: "linear-gradient(135deg, #0369a1 0%, #075985 100%)" }
+                }}
+              >
+                {loading ? <CircularProgress size={24} color="inherit" /> : "Create Account"}
+              </Button>
+            </Box>
+          )}
+
+          {/* TAB 2: FORGOT PASSWORD / RESET OTP */}
+          {activeTab === 2 && (
+            <Box component="form" onSubmit={!otpSent ? this.handleRequestOtp : this.handleResetPassword}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: "left" }}>
+                {!otpSent
+                  ? "Enter your email to receive a 6-digit verification code:"
+                  : `Enter the 6-digit code sent to ${email} and your new password:`}
+              </Typography>
+
+              <TextField
+                fullWidth
+                label="Email Address"
+                variant="outlined"
+                type="email"
+                value={email}
+                onChange={this.handleChange("email")}
+                placeholder="e.g. dad@paul.com"
+                disabled={otpSent}
+                required
+                sx={{ mb: 2 }}
+              />
+
+              {otpSent && (
+                <>
+                  <TextField
+                    fullWidth
+                    label="6-Digit OTP Code"
+                    variant="outlined"
+                    value={otpCode}
+                    onChange={this.handleChange("otpCode")}
+                    placeholder="e.g. 724777"
+                    required
+                    inputProps={{ maxLength: 6, style: { letterSpacing: 4, fontWeight: "bold" } }}
+                    sx={{ mb: 2 }}
+                  />
+
+                  <TextField
+                    fullWidth
+                    label="New Password / PIN"
+                    variant="outlined"
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={this.handleChange("newPassword")}
+                    placeholder="Min 4 characters or 6-digit PIN"
+                    required
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton onClick={this.handleToggleShowNewPassword} edge="end" size="small">
+                            {showNewPassword ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      )
+                    }}
+                    sx={{ mb: 2 }}
+                  />
+                </>
+              )}
+
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                size="large"
+                disabled={loading}
+                sx={{
+                  py: 1.4,
+                  fontWeight: "bold",
+                  borderRadius: 2,
+                  background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
+                  "&:hover": { background: "linear-gradient(135deg, #0369a1 0%, #075985 100%)" }
+                }}
+              >
+                {loading ? (
+                  <CircularProgress size={24} color="inherit" />
+                ) : !otpSent ? (
+                  "Send 6-Digit OTP Code"
+                ) : (
+                  "Verify OTP & Set New Password"
+                )}
+              </Button>
+
+              {otpSent && (
+                <Box mt={2}>
+                  <Button
+                    variant="text"
+                    size="small"
+                    onClick={() => this.setState({ otpSent: false, otpCode: "", error: "", successMsg: "" })}
+                    sx={{ textTransform: "none", color: "text.secondary" }}
+                  >
+                    Resend Code or Change Email
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          )}
+
+          {/* TAB 3: LEGACY ACCESS KEY LOGIN */}
+          {activeTab === 3 && (
+            <Box component="form" onSubmit={this.handleLegacyLogin}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: "left" }}>
+                Legacy access for backward compatibility (KEY1 - KEY4):
+              </Typography>
+
+              <TextField
+                fullWidth
+                label="Personal Access ID"
+                variant="outlined"
+                value={accessKey}
+                onChange={this.handleChange("accessKey")}
+                placeholder="e.g. KEY1, KEY2"
+                required
+                sx={{ mb: 2.5 }}
+              />
+
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                size="large"
+                disabled={loading}
+                sx={{
+                  py: 1.4,
+                  fontWeight: "bold",
+                  borderRadius: 2,
+                  background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+                  "&:hover": { background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)" }
+                }}
+              >
+                {loading ? <CircularProgress size={24} color="inherit" /> : "Log In with Key"}
+              </Button>
+            </Box>
+          )}
+        </Paper>
+
+        {/* POST-AUTH MODAL: JOIN OR CREATE CIRCLE (FOR USERS WITH 0 CIRCLES) */}
+        <Dialog open={showCircleModal} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ pb: 1, fontWeight: "bold", textAlign: "center" }}>
+            Welcome to Expense Tracker! 🚀
+          </DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" textAlign="center" mb={2}>
+              To start tracking expenses, join an existing circle or create a new one:
+            </Typography>
+
+            <Tabs
+              value={circleModalTab}
+              onChange={(e, val) => this.setState({ circleModalTab: val, error: "" })}
+              variant="fullWidth"
+              sx={{ mb: 2 }}
+            >
+              <Tab label="Join Circle" icon={<VpnKeyIcon fontSize="small" />} iconPosition="start" />
+              <Tab label="Create Circle" icon={<GroupAddIcon fontSize="small" />} iconPosition="start" />
+            </Tabs>
+
+            {circleModalTab === 0 ? (
+              <Box>
+                <TextField
+                  fullWidth
+                  label="Family / Invite Code"
+                  placeholder="e.g. PAUL-101"
+                  value={familyCodeToJoin}
+                  onChange={this.handleChange("familyCodeToJoin")}
+                  sx={{ mt: 1, mb: 2 }}
+                />
+                <Button
+                  fullWidth
+                  variant="contained"
+                  onClick={this.handleModalJoinCircle}
+                  disabled={loading}
+                  sx={{ py: 1.2, fontWeight: "bold" }}
+                >
+                  {loading ? <CircularProgress size={20} color="inherit" /> : "Join Circle"}
+                </Button>
+              </Box>
+            ) : (
+              <Box>
+                <TextField
+                  fullWidth
+                  label="Circle / Family Name"
+                  placeholder="e.g. Flatmates or My Family"
+                  value={circleNameToCreate}
+                  onChange={this.handleChange("circleNameToCreate")}
+                  sx={{ mt: 1, mb: 2 }}
+                />
+                <Button
+                  fullWidth
+                  variant="contained"
+                  onClick={this.handleModalCreateCircle}
+                  disabled={loading}
+                  sx={{ py: 1.2, fontWeight: "bold" }}
+                >
+                  {loading ? <CircularProgress size={20} color="inherit" /> : "Create & Start"}
+                </Button>
+              </Box>
+            )}
+          </DialogContent>
+        </Dialog>
+      </Container>
+    );
+  }
+}
+
+export default LoginPage;

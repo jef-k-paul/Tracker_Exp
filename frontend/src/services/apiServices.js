@@ -43,9 +43,49 @@ api.interceptors.response.use(
 );
 
 
-// login post call and sending accessKey in payload
+// Credentials login (email + password / PIN)
+export const loginWithCredentials = ({ email, password, circleId }) => {
+    return api.post("/auth/login", { email, password, circleId });
+};
+
+// Legacy accessKey login
 export const login = (accessKey) => {
     return api.post("/auth/login", { accessKey });
+};
+
+// Register individual user account
+export const registerUser = ({ email, password, name }) => {
+    return api.post("/auth/register", { email, password, name });
+};
+
+// Request 6-digit OTP for password reset
+export const forgotPassword = (email) => {
+    return api.post("/auth/forgot-password", { email });
+};
+
+// Reset password with 6-digit OTP
+export const resetPassword = ({ email, otp, newPassword }) => {
+    return api.post("/auth/reset-password", { email, otp, newPassword });
+};
+
+// Join a circle using family / invite code
+export const joinCircle = ({ familyCode, memberName }) => {
+    return api.post("/auth/join-circle", { familyCode, memberName });
+};
+
+// Create a new family / circle
+export const createCircle = ({ circleName, memberName, adminName }) => {
+    return api.post("/auth/create-circle", { circleName, memberName: memberName || adminName });
+};
+
+// Switch active circle
+export const switchCircle = (circleId) => {
+    return api.post("/auth/switch-circle", { circleId });
+};
+
+// Get all circles the current user belongs to
+export const getMyCircles = () => {
+    return api.get("/auth/my-circles");
 };
 
 //Get sumary 

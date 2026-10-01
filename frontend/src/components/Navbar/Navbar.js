@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   AppBar,
   Toolbar,
@@ -10,20 +10,74 @@ import {
   ListItemText,
   Box,
   Tooltip,
-  CircularProgress
+  CircularProgress,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  Tabs,
+  Tab,
+  TextField,
+  Divider,
+  Alert,
+  IconButton,
+  Popover
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import TableChartIcon from "@mui/icons-material/TableChart";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import CheckIcon from "@mui/icons-material/Check";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
+import GroupAddIcon from "@mui/icons-material/GroupAdd";
+import VpnKeyIcon from "@mui/icons-material/VpnKey";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import ShuffleIcon from "@mui/icons-material/Shuffle";
+import LogoutIcon from "@mui/icons-material/Logout";
 import { exportMonthlyStatementPDF, exportExpensesCSV } from "../../utils/exportUtils";
+import { getMyCircles, switchCircle, joinCircle, createCircle } from "../../services/apiServices";
 import NotificationBell from "./NotificationBell";
+
+// Funny random character profiles
+const FUNNY_CHARACTERS = [
+  { emoji: "🦊", title: "Cunning Budgeteer", bg: "#ea580c" },
+  { emoji: "🐼", title: "Chill Spender", bg: "#0284c7" },
+  { emoji: "🦝", title: "Receipt Bandit", bg: "#7c3aed" },
+  { emoji: "🐸", title: "Calculated Hopper", bg: "#059669" },
+  { emoji: "🐙", title: "Multi-Split Wizard", bg: "#db2777" },
+  { emoji: "🤖", title: "Expense Automator", bg: "#2563eb" },
+  { emoji: "🦁", title: "Circle Boss", bg: "#d97706" },
+  { emoji: "🦄", title: "Budget Sorcerer", bg: "#c026d3" },
+  { emoji: "🐨", title: "Zen Saver", bg: "#475569" },
+  { emoji: "🐵", title: "Cheeky Auditor", bg: "#e11d48" }
+];
+
+const getDeterministicIndex = (identifier) => {
+  if (!identifier) return 0;
+  let hash = 0;
+  for (let i = 0; i < identifier.length; i++) {
+    hash = (hash << 5) - hash + identifier.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) % FUNNY_CHARACTERS.length;
+};
 
 const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
   const openMenu = Boolean(anchorEl);
+
+  // Circle switcher states
+  const [circleAnchorEl, setCircleAnchorEl] = useState(null);
+  const [myCircles, setMyCircles] = useState([]);
+  const [showCircleModal, setShowCircleModal] = useState(false);
+  const [circleModalTab, setCircleModalTab] = useState(0);
+  const [modalInput, setModalInput] = useState("");
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState("");
+
+  const openCircleMenu = Boolean(circleAnchorEl);
 
   // Fallback to localStorage if currentUser not passed directly
   let user = currentUser;
@@ -34,6 +88,51 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
       user = null;
     }
   }
+
+  // Profile popover & funny character state
+  const [profileAnchorEl, setProfileAnchorEl] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [funnyCharOffset, setFunnyCharOffset] = useState(0);
+
+  const baseCharIndex = getDeterministicIndex(user?.email || user?.name || "User");
+  const currentCharIndex = (baseCharIndex + funnyCharOffset) % FUNNY_CHARACTERS.length;
+  const currentChar = FUNNY_CHARACTERS[currentCharIndex];
+
+  const handleOpenProfile = (event) => {
+    setProfileAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseProfile = () => {
+    setProfileAnchorEl(null);
+  };
+
+  const handleShuffleChar = () => {
+    setFunnyCharOffset((prev) => prev + 1);
+  };
+
+  const handleCopyFamilyCode = () => {
+    if (user?.family_code) {
+      navigator.clipboard.writeText(user.family_code);
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    }
+  };
+
+  useEffect(() => {
+    // Fetch circles if user is logged in
+    if (user && (user.userId || user.user_id || user.member_id)) {
+      getMyCircles()
+        .then((res) => {
+          if (res.data?.circles) {
+            setMyCircles(res.data.circles);
+          }
+        })
+        .catch(() => {
+          // Ignore if unauthenticated
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleOpenExport = (event) => {
     setAnchorEl(event.currentTarget);
@@ -69,6 +168,52 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
     }
   };
 
+  const handleSwitchCircle = async (circleId) => {
+    setCircleAnchorEl(null);
+    try {
+      const res = await switchCircle(circleId);
+      const data = res.data;
+      localStorage.setItem("user", JSON.stringify(data.user));
+      if (data.token) {
+        localStorage.setItem("token", data.token);
+      }
+      window.location.reload();
+    } catch (err) {
+      console.error("Failed to switch circle:", err);
+    }
+  };
+
+  const handleModalSubmit = async () => {
+    if (!modalInput.trim()) {
+      setModalError(circleModalTab === 0 ? "Please enter an Invite Code." : "Please enter a Circle name.");
+      return;
+    }
+
+    setModalLoading(true);
+    setModalError("");
+
+    try {
+      let res;
+      if (circleModalTab === 0) {
+        res = await joinCircle({ familyCode: modalInput.trim() });
+      } else {
+        res = await createCircle({ circleName: modalInput.trim() });
+      }
+
+      const data = res.data;
+      localStorage.setItem("user", JSON.stringify(data.user));
+      if (data.token) {
+        localStorage.setItem("token", data.token);
+      }
+      setShowCircleModal(false);
+      window.location.reload();
+    } catch (err) {
+      const msg = err.response?.data?.message || "Action failed. Please try again.";
+      setModalError(msg);
+      setModalLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("user");
     localStorage.removeItem("token");
@@ -78,14 +223,126 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
   return (
     <AppBar position="static" sx={{ background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)" }}>
       <Toolbar>
-        <Typography
-          variant="h6"
-          fontWeight="bold"
-          sx={{ flexGrow: 1, letterSpacing: "-0.5px" }}
-        >
-          Family Expense Tracker
-        </Typography>
+        {/* Left: Circle Name + Switcher Dropdown */}
+        <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+          <Box
+            onClick={(e) => setCircleAnchorEl(e.currentTarget)}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 0.5,
+              cursor: "pointer",
+              px: 1,
+              py: 0.5,
+              borderRadius: 2,
+              "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
+            }}
+          >
+            <Typography variant="h6" fontWeight="bold" sx={{ letterSpacing: "-0.5px" }}>
+              {user?.circle_name ? `${user.circle_name}` : "Expense Tracker"}
+            </Typography>
+            <KeyboardArrowDownIcon fontSize="small" sx={{ opacity: 0.8 }} />
+          </Box>
 
+          {user?.family_code && (
+            <Tooltip title="Your Circle / Family Invite Code (Share with others to join)">
+              <Chip
+                label={`Code: ${user.family_code}`}
+                size="small"
+                sx={{
+                  backgroundColor: "rgba(56, 189, 248, 0.15)",
+                  color: "#38bdf8",
+                  fontWeight: "bold",
+                  fontSize: "0.72rem",
+                  border: "1px solid rgba(56, 189, 248, 0.3)",
+                  display: { xs: "none", sm: "inline-flex" }
+                }}
+              />
+            </Tooltip>
+          )}
+
+          {/* Circle Switcher Menu */}
+          <Menu
+            anchorEl={circleAnchorEl}
+            open={openCircleMenu}
+            onClose={() => setCircleAnchorEl(null)}
+            PaperProps={{
+              elevation: 6,
+              sx: { borderRadius: 2.5, minWidth: 230, mt: 1, p: 0.5 }
+            }}
+          >
+            <Typography variant="caption" sx={{ px: 2, py: 0.5, color: "text.secondary", fontWeight: 700, display: "block" }}>
+              YOUR CIRCLES
+            </Typography>
+            {myCircles.map((c) => {
+              const isActive = Number(c.circle_id) === Number(user?.circle_id || user?.circleId);
+              return (
+                <MenuItem
+                  key={c.circle_id}
+                  onClick={() => handleSwitchCircle(c.circle_id)}
+                  selected={isActive}
+                  sx={{ py: 1, borderRadius: 1.5 }}
+                >
+                  <ListItemIcon sx={{ minWidth: 32 }}>
+                    {isActive ? <CheckIcon fontSize="small" color="primary" /> : <Box width={20} />}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={c.circle_name}
+                    secondary={`Code: ${c.family_code} • ${c.role}`}
+                    primaryTypographyProps={{ variant: "body2", fontWeight: isActive ? 700 : 500 }}
+                    secondaryTypographyProps={{ variant: "caption", fontSize: "0.7rem" }}
+                  />
+                </MenuItem>
+              );
+            })}
+
+            <Divider sx={{ my: 1 }} />
+
+            <MenuItem
+              onClick={() => {
+                setCircleAnchorEl(null);
+                setCircleModalTab(0);
+                setModalInput("");
+                setModalError("");
+                setShowCircleModal(true);
+              }}
+              sx={{ py: 1, borderRadius: 1.5 }}
+            >
+              <ListItemIcon sx={{ minWidth: 32, color: "#0284c7" }}>
+                <VpnKeyIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText
+                primary="Join Another Circle"
+                secondary="Enter an invite code"
+                primaryTypographyProps={{ variant: "body2", fontWeight: 600 }}
+                secondaryTypographyProps={{ variant: "caption", fontSize: "0.7rem" }}
+              />
+            </MenuItem>
+
+            <MenuItem
+              onClick={() => {
+                setCircleAnchorEl(null);
+                setCircleModalTab(1);
+                setModalInput("");
+                setModalError("");
+                setShowCircleModal(true);
+              }}
+              sx={{ py: 1, borderRadius: 1.5 }}
+            >
+              <ListItemIcon sx={{ minWidth: 32, color: "#10b981" }}>
+                <AddCircleOutlineIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText
+                primary="Create New Circle"
+                secondary="Start a flatmates or trip circle"
+                primaryTypographyProps={{ variant: "body2", fontWeight: 600 }}
+                secondaryTypographyProps={{ variant: "caption", fontSize: "0.7rem" }}
+              />
+            </MenuItem>
+          </Menu>
+        </Box>
+
+        {/* Right Nav actions */}
         <Box display="flex" alignItems="center" gap={1}>
           <Button color="inherit" component={RouterLink} to="/dashboard">
             Dashboard
@@ -130,12 +387,7 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
                 onClose={handleCloseExport}
                 PaperProps={{
                   elevation: 6,
-                  sx: {
-                    borderRadius: 2.5,
-                    minWidth: 220,
-                    mt: 1,
-                    p: 0.5
-                  }
+                  sx: { borderRadius: 2.5, minWidth: 220, mt: 1, p: 0.5 }
                 }}
                 transformOrigin={{ horizontal: "right", vertical: "top" }}
                 anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
@@ -175,11 +427,258 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
             />
           )}
 
+          {/* Small Funny Random Character Profile Circle */}
+          {user && (
+            <>
+              <Tooltip title={`Profile: ${user?.name || "User"} (${currentChar.title})`}>
+                <IconButton
+                  onClick={handleOpenProfile}
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    p: 0,
+                    bgcolor: currentChar.bg,
+                    border: "2px solid rgba(255, 255, 255, 0.5)",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+                    transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",
+                    "&:hover": {
+                      transform: "scale(1.15)",
+                      bgcolor: currentChar.bg
+                    }
+                  }}
+                >
+                  <Typography sx={{ fontSize: "1.25rem", lineHeight: 1, userSelect: "none" }}>
+                    {currentChar.emoji}
+                  </Typography>
+                </IconButton>
+              </Tooltip>
+
+              {/* Small Window of Profile & Circle Data */}
+              <Popover
+                open={Boolean(profileAnchorEl)}
+                anchorEl={profileAnchorEl}
+                onClose={handleCloseProfile}
+                anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                transformOrigin={{ vertical: "top", horizontal: "right" }}
+                PaperProps={{
+                  elevation: 8,
+                  sx: {
+                    mt: 1.5,
+                    p: 2.5,
+                    width: 300,
+                    borderRadius: 3.5,
+                    border: "1px solid #e2e8f0",
+                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)"
+                  }
+                }}
+              >
+                {/* Character Avatar & Identity Header */}
+                <Box display="flex" alignItems="center" gap={1.5} mb={2}>
+                  <Tooltip title="Click to roll another funny character!">
+                    <Box
+                      onClick={handleShuffleChar}
+                      sx={{
+                        width: 50,
+                        height: 50,
+                        borderRadius: "50%",
+                        bgcolor: currentChar.bg,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "1.8rem",
+                        boxShadow: "0 3px 10px rgba(0,0,0,0.18)",
+                        cursor: "pointer",
+                        transition: "transform 0.15s ease",
+                        "&:hover": { transform: "scale(1.1) rotate(6deg)" }
+                      }}
+                    >
+                      {currentChar.emoji}
+                    </Box>
+                  </Tooltip>
+                  <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                    <Typography variant="subtitle1" fontWeight="bold" noWrap>
+                      {user?.name || "Member"}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{ color: currentChar.bg, fontWeight: 700, display: "block", lineHeight: 1.2 }}
+                    >
+                      {currentChar.title}
+                    </Typography>
+                    <Chip
+                      label={user?.role || "MEMBER"}
+                      size="small"
+                      sx={{
+                        mt: 0.5,
+                        height: 18,
+                        fontSize: "0.65rem",
+                        fontWeight: "bold",
+                        bgcolor: user?.role === "ADMIN" ? "rgba(124, 58, 237, 0.15)" : "rgba(2, 132, 199, 0.15)",
+                        color: user?.role === "ADMIN" ? "#7c3aed" : "#0284c7"
+                      }}
+                    />
+                  </Box>
+                </Box>
+
+                <Divider sx={{ my: 1.5 }} />
+
+                {/* Personal Information */}
+                <Box mb={1.5}>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" py={0.3}>
+                    <Typography variant="caption" color="text.secondary">
+                      Email Address:
+                    </Typography>
+                    <Typography variant="body2" fontWeight={600} noWrap sx={{ maxWidth: 175 }}>
+                      {user?.email || "No email"}
+                    </Typography>
+                  </Box>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" py={0.3}>
+                    <Typography variant="caption" color="text.secondary">
+                      Member ID:
+                    </Typography>
+                    <Typography variant="body2" fontWeight={600}>
+                      #{user?.member_id || user?.memberId || "1"}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                <Divider sx={{ my: 1.5 }} />
+
+                {/* Active Circle Information */}
+                <Box mb={2} p={1.5} sx={{ bgcolor: "#f8fafc", borderRadius: 2, border: "1px solid #e2e8f0" }}>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
+                    <Typography variant="caption" color="text.secondary" fontWeight={700} textTransform="uppercase">
+                      Active Circle
+                    </Typography>
+                    <Typography variant="caption" color="primary" fontWeight={700}>
+                      {myCircles.length > 1 ? `${myCircles.length} circles` : "1 circle"}
+                    </Typography>
+                  </Box>
+
+                  <Typography variant="body2" fontWeight="bold" color="text.primary">
+                    {user?.circle_name || "Paul Family"}
+                  </Typography>
+
+                  {user?.family_code && (
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mt={0.8}>
+                      <Typography variant="caption" color="text.secondary">
+                        Invite Code: <strong style={{ color: "#0284c7" }}>{user.family_code}</strong>
+                      </Typography>
+                      <Tooltip title={copiedCode ? "Copied!" : "Copy Code"}>
+                        <IconButton size="small" onClick={handleCopyFamilyCode} sx={{ p: 0.5 }}>
+                          <ContentCopyIcon
+                            fontSize="small"
+                            sx={{ fontSize: "0.85rem", color: copiedCode ? "#10b981" : "inherit" }}
+                          />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  )}
+                </Box>
+
+                {/* Bottom Footer Actions */}
+                <Box display="flex" justifyContent="space-between" alignItems="center">
+                  <Button
+                    size="small"
+                    startIcon={<ShuffleIcon fontSize="small" />}
+                    onClick={handleShuffleChar}
+                    sx={{ textTransform: "none", fontSize: "0.74rem", color: "text.secondary" }}
+                  >
+                    Roll Avatar
+                  </Button>
+                  <Button
+                    size="small"
+                    color="error"
+                    startIcon={<LogoutIcon fontSize="small" />}
+                    onClick={handleLogout}
+                    sx={{ textTransform: "none", fontWeight: "bold", fontSize: "0.78rem" }}
+                  >
+                    Logout
+                  </Button>
+                </Box>
+              </Popover>
+            </>
+          )}
+
           <Button color="inherit" onClick={handleLogout}>
             Logout
           </Button>
         </Box>
       </Toolbar>
+
+      {/* DIALOG FOR JOINING OR CREATING A CIRCLE */}
+      <Dialog open={showCircleModal} onClose={() => setShowCircleModal(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ pb: 1, fontWeight: "bold", textAlign: "center" }}>
+          {circleModalTab === 0 ? "Join a Circle" : "Create a New Circle"}
+        </DialogTitle>
+        <DialogContent>
+          <Tabs
+            value={circleModalTab}
+            onChange={(e, val) => {
+              setCircleModalTab(val);
+              setModalError("");
+              setModalInput("");
+            }}
+            variant="fullWidth"
+            sx={{ mb: 2 }}
+          >
+            <Tab label="Join Circle" icon={<VpnKeyIcon fontSize="small" />} iconPosition="start" />
+            <Tab label="Create Circle" icon={<GroupAddIcon fontSize="small" />} iconPosition="start" />
+          </Tabs>
+
+          {modalError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {modalError}
+            </Alert>
+          )}
+
+          {circleModalTab === 0 ? (
+            <Box>
+              <Typography variant="body2" color="text.secondary" mb={1}>
+                Enter the Invite Code shared by your family admin or flatmate:
+              </Typography>
+              <TextField
+                fullWidth
+                label="Invite Code (e.g. PAUL-101)"
+                value={modalInput}
+                onChange={(e) => setModalInput(e.target.value)}
+                sx={{ mb: 2 }}
+              />
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={handleModalSubmit}
+                disabled={modalLoading}
+                sx={{ py: 1.2, fontWeight: "bold" }}
+              >
+                {modalLoading ? <CircularProgress size={20} color="inherit" /> : "Join Circle"}
+              </Button>
+            </Box>
+          ) : (
+            <Box>
+              <Typography variant="body2" color="text.secondary" mb={1}>
+                Enter a name for your new group or household:
+              </Typography>
+              <TextField
+                fullWidth
+                label="Circle Name (e.g. Flatmates, Vacation Trip)"
+                value={modalInput}
+                onChange={(e) => setModalInput(e.target.value)}
+                sx={{ mb: 2 }}
+              />
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={handleModalSubmit}
+                disabled={modalLoading}
+                sx={{ py: 1.2, fontWeight: "bold" }}
+              >
+                {modalLoading ? <CircularProgress size={20} color="inherit" /> : "Create Circle"}
+              </Button>
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
     </AppBar>
   );
 };
