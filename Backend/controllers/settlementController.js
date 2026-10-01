@@ -6,7 +6,8 @@ exports.getSettlements = async (req, res) => {
     if (!month || !year) {
       return res.status(400).json({ message: "Month and Year query parameters are required." });
     }
-    const result = await settlementService.calculateSettlements(Number(month), Number(year));
+    const circleId = req.user?.circleId || null;
+    const result = await settlementService.calculateSettlements(Number(month), Number(year), circleId);
     res.json(result);
   } catch (err) {
     console.error("Error in getSettlements:", err);
@@ -18,6 +19,7 @@ exports.initiateSettlement = async (req, res) => {
   try {
     const { receiverId, amount, month, year, notes } = req.body;
     const payerId = req.user?.memberId;
+    const circleId = req.user?.circleId || 1;
 
     if (!payerId) {
       return res.status(401).json({ message: "Authentication required to initiate settlement." });
@@ -29,7 +31,8 @@ exports.initiateSettlement = async (req, res) => {
       amount,
       month,
       year,
-      notes
+      notes,
+      circleId
     });
 
     res.status(201).json({

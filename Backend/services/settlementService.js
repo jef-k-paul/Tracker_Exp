@@ -2,13 +2,13 @@ const summaryService = require("./summaryService");
 const settlementRepository = require("../repositories/settlementRepository");
 const memberRepository = require("../repositories/memberRepository");
 
-exports.calculateSettlements = async (month, year) => {
+exports.calculateSettlements = async (month, year, circleId = null) => {
   try {
-    const summary = await summaryService.getSummary(month, year);
-    const existingSettlements = await settlementRepository.getSettlementsForMonth(month, year);
+    const summary = await summaryService.getSummary(month, year, circleId);
+    const existingSettlements = await settlementRepository.getSettlementsForMonth(month, year, circleId);
 
     // Map member names to member_ids
-    const allMembers = await memberRepository.getAllActiveMembers();
+    const allMembers = await memberRepository.getAllActiveMembers(circleId);
     const memberMap = {};
     allMembers.forEach((m) => {
       memberMap[m.name.trim().toLowerCase()] = m.member_id;
@@ -95,7 +95,7 @@ exports.calculateSettlements = async (month, year) => {
   }
 };
 
-exports.initiateSettlement = async ({ payerId, receiverId, amount, month, year, notes }) => {
+exports.initiateSettlement = async ({ payerId, receiverId, amount, month, year, notes, circleId = 1 }) => {
   const numAmount = Number(amount);
   if (!numAmount || numAmount <= 0) {
     throw new Error("Settlement amount must be a positive number.");
@@ -121,6 +121,7 @@ exports.initiateSettlement = async ({ payerId, receiverId, amount, month, year, 
   }
 
   const settlementId = await settlementRepository.createSettlement({
+    circleId: Number(circleId) || 1,
     payerId: Number(payerId),
     receiverId: Number(receiverId),
     amount: numAmount,

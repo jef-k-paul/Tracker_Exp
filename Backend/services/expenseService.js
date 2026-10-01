@@ -1,14 +1,12 @@
 const expenseRepository = require("../repositories/expenseRepository");
 const memberRepository = require("../repositories/memberRepository");
-
 const db = require("../db/connections");
 
 exports.addExpense = async (data) => {
-  const { amount, categoryId, paidBy, date, description, splitType, splits } = data;
-
+  const { amount, categoryId, paidBy, date, description, splitType, splits, circleId } = data;
   const numAmount = Number(amount);
 
-  // 1️ Validate input parameters FIRST before touching the database
+  // 1. Validate input parameters
   if (!amount || isNaN(numAmount) || numAmount <= 0) {
     throw new Error("Expense amount must be a positive number.");
   }
@@ -22,7 +20,7 @@ exports.addExpense = async (data) => {
     throw new Error("Expense date is required.");
   }
 
-  // 2️ Pre-validate Custom Split calculations BEFORE touching database
+  // 2. Pre-validate Custom Split calculations
   if (splitType === "CUSTOM") {
     if (!splits || !Array.isArray(splits) || splits.length === 0) {
       throw new Error("Custom split details are missing.");
@@ -37,12 +35,13 @@ exports.addExpense = async (data) => {
     }
   }
 
-  // 3️ Check for potential duplicate expense in DB
+  // 3. Check for potential duplicate expense in DB
   if (!data.confirmDuplicate) {
     const existingDuplicate = await expenseRepository.findDuplicateExpense({
       amount: numAmount,
       categoryId,
-      date
+      date,
+      circleId: circleId || null
     });
 
     if (existingDuplicate) {
@@ -55,14 +54,15 @@ exports.addExpense = async (data) => {
     }
   }
 
-  // 3️ Use a MySQL Transaction so both expense and splits insert atomically
+  // 4. Use MySQL Transaction for atomic insertion
   return new Promise((resolve, reject) => {
     db.beginTransaction(async (transactionErr) => {
       if (transactionErr) return reject(transactionErr);
 
       try {
-        // A. Insert parent expense record
+        // A. Insert parent expense record with circle_id
         const expenseId = await expenseRepository.insertExpense({
+          circleId: circleId || 1,
           amount: numAmount,
           categoryId,
           paidBy,
@@ -71,11 +71,11 @@ exports.addExpense = async (data) => {
           splitType
         });
 
-        // B. Insert child split records
+        // B. Insert child split records for this circle's active members
         if (splitType === "EQUAL") {
-          const members = await memberRepository.getAllActiveMembers();
+          const members = await memberRepository.getAllActiveMembers(circleId || null);
           if (!members || members.length === 0) {
-            throw new Error("No active family members found for equal split.");
+            throw new Error("No active circle members found for equal split.");
           }
           const share = Number((numAmount / members.length).toFixed(2));
 
@@ -104,7 +104,6 @@ exports.addExpense = async (data) => {
           resolve(expenseId);
         });
       } catch (err) {
-        // Rollback transaction on ANY failure to prevent orphan rows
         db.rollback(() => {
           reject(err);
         });
@@ -113,29 +112,28 @@ exports.addExpense = async (data) => {
   });
 };
 
+exports.expenses = async (month, year, circleId = null) => {
+  const expenseList = await expenseRepository.expenses(month, year, circleId);
+  const allSplits = await expenseRepository.getSplitsForMonth(month, year);
 
-exports.expenses = async (month, year) => {
-    const expenseList = await expenseRepository.expenses(month, year);
-    const allSplits = await expenseRepository.getSplitsForMonth(month, year);
-
-    return expenseList.map(exp => {
-        const expSplits = allSplits.filter(s => s.expense_id === exp.expense_id);
-        return {
-            ...exp,
-            splits: expSplits
-        };
-    });
+  return expenseList.map((exp) => {
+    const expSplits = allSplits.filter((s) => s.expense_id === exp.expense_id);
+    return {
+      ...exp,
+      splits: expSplits
+    };
+  });
 };
 
-exports.checkDuplicate = async (amount, categoryId, date) => {
-    if (!amount || !categoryId || !date) return null;
-    return await expenseRepository.findDuplicateExpense({ amount, categoryId, date });
+exports.checkDuplicate = async (amount, categoryId, date, circleId = null) => {
+  if (!amount || !categoryId || !date) return null;
+  return await expenseRepository.findDuplicateExpense({ amount, categoryId, date, circleId });
 };
 
 exports.getAllTimePaid = async (memberId) => {
-    return await expenseRepository.getAllTimePaid(memberId);
+  return await expenseRepository.getAllTimePaid(memberId);
 };
 
 exports.getAllTimeShare = async (memberId) => {
-    return await expenseRepository.getAllTimeShare(memberId);
+  return await expenseRepository.getAllTimeShare(memberId);
 };

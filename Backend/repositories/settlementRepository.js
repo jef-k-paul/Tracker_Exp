@@ -1,12 +1,12 @@
 const db = require("../db/connections");
 
-exports.createSettlement = ({ payerId, receiverId, amount, month, year, notes = "" }) => {
+exports.createSettlement = ({ circleId = 1, payerId, receiverId, amount, month, year, notes = "" }) => {
   return new Promise((resolve, reject) => {
     const query = `
-      INSERT INTO settlements (payer_id, receiver_id, amount, month, year, status, notes)
-      VALUES (?, ?, ?, ?, ?, 'PENDING', ?)
+      INSERT INTO settlements (circle_id, payer_id, receiver_id, amount, month, year, status, notes)
+      VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
     `;
-    db.query(query, [payerId, receiverId, amount, month, year, notes], (err, result) => {
+    db.query(query, [circleId, payerId, receiverId, amount, month, year, notes], (err, result) => {
       if (err) return reject(err);
       resolve(result.insertId);
     });
@@ -45,8 +45,15 @@ exports.updateSettlementStatus = (settlementId, status, confirmedAt = null) => {
   });
 };
 
-exports.getSettlementsForMonth = (month, year) => {
+exports.getSettlementsForMonth = (month, year, circleId = null) => {
   return new Promise((resolve, reject) => {
+    const params = [month, year];
+    let circleFilter = "";
+    if (circleId) {
+      circleFilter = " AND s.circle_id = ?";
+      params.push(circleId);
+    }
+
     const query = `
       SELECT s.*, 
              p.name AS payer_name, 
@@ -54,10 +61,10 @@ exports.getSettlementsForMonth = (month, year) => {
       FROM settlements s
       JOIN members p ON s.payer_id = p.member_id
       JOIN members r ON s.receiver_id = r.member_id
-      WHERE s.month = ? AND s.year = ?
+      WHERE s.month = ? AND s.year = ?${circleFilter}
       ORDER BY s.created_at DESC
     `;
-    db.query(query, [month, year], (err, rows) => {
+    db.query(query, params, (err, rows) => {
       if (err) return reject(err);
       resolve(rows);
     });

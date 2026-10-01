@@ -2,37 +2,61 @@ const db = require('../db/connections');
 
 exports.findById = (accessKey) => {
     return new Promise((resolve, reject) => {
-        const query = 'SELECT member_id, name, role FROM members WHERE access_key = ? AND is_active = TRUE';
+        const query = `
+          SELECT m.member_id, m.name, m.role, m.access_key, m.circle_id, c.name AS circle_name, c.family_code
+          FROM members m
+          LEFT JOIN circles c ON m.circle_id = c.circle_id
+          WHERE m.access_key = ? AND m.is_active = TRUE
+        `;
 
-
-        db.query(query, [accessKey], (err, results) => {
+        db.query(query, [accessKey?.trim()], (err, results) => {
             if(err) return reject(err);
-
-            resolve(results[0]); //first object/user
+            resolve(results[0]);
         });
     });
 };
 
-exports.getAllActiveMembers = () => {
+exports.getAllActiveMembers = (circleId = null) => {
     return new Promise((resolve, reject) => {
-        const query = `SELECT member_id, name FROM members WHERE is_active = TRUE AND name not like "%ADMIN%"`;
+        let query = `SELECT member_id, name, circle_id FROM members WHERE is_active = TRUE AND name NOT LIKE "%ADMIN%"`;
+        const params = [];
+        if (circleId) {
+            query += ` AND circle_id = ?`;
+            params.push(circleId);
+        }
 
-        db.query(query, (err, results) => {
+        db.query(query, params, (err, results) => {
             if (err) return reject(err);
             resolve(results);
         });
     });
 };
 
-exports.getMembers = () => {
+exports.getMembers = (circleId = null) => {
     return new Promise((resolve, reject) => {
-        const query = `SELECT member_id, name from members where is_active = TRUE AND name not like "%ADMIN%"`;
+        let query = `SELECT member_id, name, circle_id FROM members WHERE is_active = TRUE AND name NOT LIKE "%ADMIN%"`;
+        const params = [];
+        if (circleId) {
+            query += ` AND circle_id = ?`;
+            params.push(circleId);
+        }
 
-        db.query(query, (err, results) => {
-            if(err) 
-                return reject(err);
-            
+        db.query(query, params, (err, results) => {
+            if(err) return reject(err);
             resolve(results);
+        });
+    });
+};
+
+exports.createMember = ({ name, role = "MEMBER", accessKey, circleId = 1 }) => {
+    return new Promise((resolve, reject) => {
+        const query = `
+          INSERT INTO members (name, role, access_key, circle_id, is_active)
+          VALUES (?, ?, ?, ?, 1)
+        `;
+        db.query(query, [name, role, accessKey, circleId], (err, result) => {
+            if (err) return reject(err);
+            resolve(result.insertId);
         });
     });
 };
