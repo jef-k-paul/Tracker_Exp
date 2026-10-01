@@ -77,13 +77,19 @@ exports.addExpense = async (data) => {
           if (!members || members.length === 0) {
             throw new Error("No active circle members found for equal split.");
           }
-          const share = Number((numAmount / members.length).toFixed(2));
+          const baseShare = Math.floor((numAmount / members.length) * 100) / 100;
+          let remainderCents = Math.round((numAmount - baseShare * members.length) * 100);
 
-          for (let member of members) {
+          for (let i = 0; i < members.length; i++) {
+            let memberShare = baseShare;
+            if (remainderCents > 0) {
+              memberShare = Number((memberShare + 0.01).toFixed(2));
+              remainderCents--;
+            }
             await expenseRepository.insertSplit({
               expenseId,
-              memberId: member.member_id,
-              shareAmount: share
+              memberId: members[i].member_id,
+              shareAmount: memberShare
             });
           }
         } else if (splitType === "CUSTOM") {

@@ -19,10 +19,10 @@ exports.initiateSettlement = async (req, res) => {
   try {
     const { receiverId, amount, month, year, notes } = req.body;
     const payerId = req.user?.memberId;
-    const circleId = req.user?.circleId || 1;
+    const circleId = req.user?.circleId;
 
-    if (!payerId) {
-      return res.status(401).json({ message: "Authentication required to initiate settlement." });
+    if (!payerId || !circleId) {
+      return res.status(401).json({ message: "Authentication and active circle required to initiate settlement." });
     }
 
     const result = await settlementService.initiateSettlement({

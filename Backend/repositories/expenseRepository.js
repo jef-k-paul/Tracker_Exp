@@ -66,17 +66,24 @@ exports.expenses = (month, year, circleId = null) => {
   });
 };
 
-exports.getSplitsForMonth = (month, year) => {
+exports.getSplitsForMonth = (month, year, circleId = null) => {
   return new Promise((resolve, reject) => {
+    const params = [month, year];
+    let circleFilter = "";
+    if (circleId) {
+      circleFilter = " AND e.circle_id = ?";
+      params.push(circleId);
+    }
+
     const query = `
       SELECT es.expense_id, es.member_id, m.name AS member_name, es.share_amount 
       FROM expense_splits es 
       JOIN members m ON es.member_id = m.member_id 
       JOIN expenses e ON es.expense_id = e.expense_id 
-      WHERE MONTH(e.expense_date) = ? AND YEAR(e.expense_date) = ?
+      WHERE MONTH(e.expense_date) = ? AND YEAR(e.expense_date) = ?${circleFilter}
     `;
 
-    db.query(query, [month, year], (err, res) => {
+    db.query(query, params, (err, res) => {
       if (err) return reject(err);
       resolve(res);
     });

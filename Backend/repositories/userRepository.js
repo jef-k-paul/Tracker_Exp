@@ -12,7 +12,7 @@ exports.findByEmail = (email) => {
 
 exports.findById = (userId) => {
   return new Promise((resolve, reject) => {
-    const query = `SELECT user_id, email, name, created_at FROM users WHERE user_id = ?`;
+    const query = `SELECT user_id, email, name, access_key, created_at FROM users WHERE user_id = ?`;
     db.query(query, [userId], (err, rows) => {
       if (err) return reject(err);
       resolve(rows[0] || null);
@@ -20,13 +20,23 @@ exports.findById = (userId) => {
   });
 };
 
-exports.createUser = ({ email, passwordHash, name }) => {
+exports.findByAccessKey = (accessKey) => {
+  return new Promise((resolve, reject) => {
+    const query = `SELECT * FROM users WHERE access_key = ?`;
+    db.query(query, [accessKey?.trim()?.toUpperCase()], (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows[0] || null);
+    });
+  });
+};
+
+exports.createUser = ({ email, passwordHash, name, accessKey = null }) => {
   return new Promise((resolve, reject) => {
     const query = `
-      INSERT INTO users (email, password_hash, name)
-      VALUES (?, ?, ?)
+      INSERT INTO users (email, password_hash, name, access_key)
+      VALUES (?, ?, ?, ?)
     `;
-    db.query(query, [email?.trim()?.toLowerCase(), passwordHash, name?.trim()], (err, result) => {
+    db.query(query, [email?.trim()?.toLowerCase(), passwordHash, name?.trim(), accessKey?.trim()?.toUpperCase() || null], (err, result) => {
       if (err) return reject(err);
       resolve(result.insertId);
     });
@@ -93,6 +103,36 @@ exports.getUserCircles = (userId) => {
     db.query(query, [userId], (err, rows) => {
       if (err) return reject(err);
       resolve(rows);
+    });
+  });
+};
+
+exports.findByIdWithPassword = (userId) => {
+  return new Promise((resolve, reject) => {
+    const query = `SELECT * FROM users WHERE user_id = ?`;
+    db.query(query, [userId], (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows[0] || null);
+    });
+  });
+};
+
+exports.updateEmail = (userId, newEmail) => {
+  return new Promise((resolve, reject) => {
+    const query = `UPDATE users SET email = ? WHERE user_id = ?`;
+    db.query(query, [newEmail?.trim()?.toLowerCase(), userId], (err, result) => {
+      if (err) return reject(err);
+      resolve(result);
+    });
+  });
+};
+
+exports.checkAccessKey = (userId, accessKey) => {
+  return new Promise((resolve, reject) => {
+    const query = `SELECT member_id FROM members WHERE user_id = ? AND access_key = ?`;
+    db.query(query, [userId, accessKey?.trim()], (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows && rows.length > 0);
     });
   });
 };

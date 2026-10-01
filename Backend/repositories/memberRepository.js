@@ -3,9 +3,10 @@ const db = require('../db/connections');
 exports.findById = (accessKey) => {
     return new Promise((resolve, reject) => {
         const query = `
-          SELECT m.member_id, m.name, m.role, m.access_key, m.circle_id, c.name AS circle_name, c.family_code
+          SELECT m.member_id, m.user_id, m.name, m.role, m.access_key, m.circle_id, u.email, c.name AS circle_name, c.family_code
           FROM members m
           LEFT JOIN circles c ON m.circle_id = c.circle_id
+          LEFT JOIN users u ON m.user_id = u.user_id
           WHERE m.access_key = ? AND m.is_active = TRUE
         `;
 
@@ -18,7 +19,7 @@ exports.findById = (accessKey) => {
 
 exports.getAllActiveMembers = (circleId = null) => {
     return new Promise((resolve, reject) => {
-        let query = `SELECT member_id, name, circle_id FROM members WHERE is_active = TRUE AND name NOT LIKE "%ADMIN%"`;
+        let query = `SELECT member_id, name, role, circle_id FROM members WHERE is_active = TRUE`;
         const params = [];
         if (circleId) {
             query += ` AND circle_id = ?`;
@@ -34,7 +35,7 @@ exports.getAllActiveMembers = (circleId = null) => {
 
 exports.getMembers = (circleId = null) => {
     return new Promise((resolve, reject) => {
-        let query = `SELECT member_id, name, circle_id FROM members WHERE is_active = TRUE AND name NOT LIKE "%ADMIN%"`;
+        let query = `SELECT member_id, name, role, circle_id FROM members WHERE is_active = TRUE`;
         const params = [];
         if (circleId) {
             query += ` AND circle_id = ?`;

@@ -3,7 +3,10 @@ const expenseService = require("../services/expenseService");
 exports.addExpense = async (req, res) => {
     try {
         console.log("Add Expense Request:", req.body);
-        const circleId = req.user?.circleId || 1;
+        const circleId = req.user?.circleId;
+        if (!circleId) {
+            return res.status(400).json({ message: "You must belong to an active circle to add an expense." });
+        }
         const data = { ...req.body, circleId };
         const result = await expenseService.addExpense(data);
         res.json({ message: "Expense added successfully", expenseId: result });

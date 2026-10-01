@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const authService = require("../services/authServices");
+const userRepository = require("../repositories/userRepository");
 const { JWT_SECRET } = require("../middlewares/authMiddleware");
 
 const buildUserPayload = (user, activeCircle) => {
@@ -7,6 +8,8 @@ const buildUserPayload = (user, activeCircle) => {
     userId: user.userId || user.user_id,
     email: user.email,
     name: activeCircle?.member_name || user.name,
+    accessKey: user.accessKey || user.access_key || activeCircle?.access_key || null,
+    access_key: user.accessKey || user.access_key || activeCircle?.access_key || null,
     memberId: activeCircle?.member_id || null,
     member_id: activeCircle?.member_id || null,
     role: activeCircle?.role || "MEMBER",
@@ -26,8 +29,8 @@ const generateToken = (payload) => {
 // 1. Individual User Registration
 exports.register = async (req, res) => {
   try {
-    const { email, password, name } = req.body;
-    const user = await authService.register({ email, password, name });
+    const { email, password, name, accessKey } = req.body;
+    const user = await authService.register({ email, password, name, accessKey });
 
     const payload = buildUserPayload(user, null);
     const token = generateToken(payload);
@@ -111,7 +114,7 @@ exports.joinCircle = async (req, res) => {
       memberName
     });
 
-    const user = { userId, email: req.user.email, name: req.user.name };
+    const user = await userRepository.findById(userId);
     const payload = buildUserPayload(user, result.activeCircle);
     const token = generateToken(payload);
 
@@ -140,7 +143,7 @@ exports.createCircle = async (req, res) => {
       memberName
     });
 
-    const user = { userId, email: req.user.email, name: req.user.name };
+    const user = await userRepository.findById(userId);
     const payload = buildUserPayload(user, result.activeCircle);
     const token = generateToken(payload);
 
@@ -170,7 +173,7 @@ exports.switchCircle = async (req, res) => {
       return res.status(403).json({ message: "You are not a member of this circle." });
     }
 
-    const user = { userId, email: req.user.email, name: req.user.name };
+    const user = await userRepository.findById(userId);
     const payload = buildUserPayload(user, selectedCircle);
     const token = generateToken(payload);
 
@@ -212,9 +215,13 @@ exports.loginWithKey = async (req, res) => {
       return res.status(401).json({ message: "Invalid Access ID." });
     }
 
+    if (!member.email) {
+      return res.status(400).json({ message: "No email address found for this account. Email registration is mandatory." });
+    }
+
     const payload = {
       userId: member.user_id || member.member_id,
-      email: `${member.name.toLowerCase()}@paul.com`,
+      email: member.email,
       name: member.name,
       memberId: member.member_id,
       member_id: member.member_id,
@@ -254,5 +261,81 @@ exports.loginWithKey = async (req, res) => {
   } catch (err) {
     console.error("Legacy login error:", err);
     res.status(500).json({ message: `Server error: ${err.message}` });
+  }
+};
+
+// 10. Update Email Address with Identity Verification
+exports.updateEmail = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Authentication required." });
+    }
+
+    const { newEmail, confirmEmail, verificationKey } = req.body;
+    const updatedUser = await authService.updateEmail({
+      userId,
+      newEmail,
+      confirmEmail,
+      verificationKey
+    });
+
+    // Rebuild updated user payload and new token
+    const circles = await authService.getUserCircles(userId);
+    const activeCircle = circles.find((c) => c.circle_id === Number(req.user.circleId)) || circles[0] || null;
+    const payload = buildUserPayload(updatedUser, activeCircle);
+    const token = generateToken(payload);
+
+    res.json({
+      message: "Email updated successfully!",
+      token,
+      user: payload
+    });
+  } catch (err) {
+    console.error("Update email error:", err.message);
+    res.status(400).json({ message: err.message || "Failed to update email." });
+  }
+};
+
+// 11. Get Current User Profile (Fresh from DB)
+exports.getMe = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Authentication required." });
+    }
+
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const circles = await authService.getUserCircles(userId);
+    const activeCircleId = req.user?.circleId;
+    const activeCircle = circles.find((c) => c.circle_id === Number(activeCircleId)) || circles[0] || null;
+
+    const payload = buildUserPayload(user, activeCircle);
+    const token = generateToken(payload);
+
+    res.json({
+      user: payload,
+      circles,
+      activeCircle,
+      token
+    });
+  } catch (err) {
+    console.error("Get me error:", err);
+    res.status(500).json({ message: "Failed to retrieve user profile." });
+  }
+};
+
+// 12. Generate unique Access ID preview from name
+exports.generateKey = async (req, res) => {
+  try {
+    const { name } = req.query;
+    const key = await authService.generateAccessKey(name);
+    res.json({ accessKey: key });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to generate key" });
   }
 };
