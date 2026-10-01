@@ -60,13 +60,15 @@ class AddExpensePage extends Component {
       return;
     }
 
-    getMembers()
+    const circleId = this.state.user?.circle_id || this.state.user?.circleId;
+
+    getMembers(circleId)
       .then((response) => {
         this.setState({ members: response.data || [] });
       })
       .catch((error) => {
         console.error(error);
-        this.showSnackbar("Failed to load family members", "error");
+        this.showSnackbar("Failed to load circle members", "error");
       });
 
     getCategories()
@@ -90,9 +92,10 @@ class AddExpensePage extends Component {
   };
 
   checkForDuplicateLive = () => {
-    const { amount, categoryId, date } = this.state;
+    const { amount, categoryId, date, user } = this.state;
+    const circleId = user?.circle_id || user?.circleId;
     if (amount > 0 && categoryId && date) {
-      checkDuplicateExpense(amount, categoryId, date)
+      checkDuplicateExpense(amount, categoryId, date, circleId)
         .then((res) => {
           if (res.data?.isDuplicate) {
             const dup = res.data.duplicateInfo;
@@ -164,7 +167,14 @@ class AddExpensePage extends Component {
       return;
     }
 
+    const circleId = this.state.user?.circle_id || this.state.user?.circleId;
+    if (!circleId) {
+      this.showSnackbar("Active circle is required to add an expense.", "error");
+      return;
+    }
+
     const expense = {
+      circleId,
       amount: amountNum,
       categoryId: Number(this.state.categoryId),
       paidBy: Number(this.state.paidBy),
@@ -240,6 +250,7 @@ class AddExpensePage extends Component {
     }
 
     const {
+      user,
       amount,
       categoryId,
       paidBy,
@@ -287,23 +298,95 @@ class AddExpensePage extends Component {
             elevation={3}
             sx={{
               p: 3,
-              mb: 3,
+              mb: 2.5,
               borderRadius: 3,
               background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
               color: "#ffffff"
             }}
           >
-            <Box display="flex" alignItems="center">
-              <AddCardIcon sx={{ fontSize: 36, color: "#38bdf8", mr: 2 }} />
+            <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
+              <Box display="flex" alignItems="center">
+                <AddCardIcon sx={{ fontSize: 36, color: "#38bdf8", mr: 2 }} />
+                <Box>
+                  <Typography variant="h4" fontWeight="bold">
+                    Add New Expense
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                    Log a transaction and automatically partition shares across members.
+                  </Typography>
+                </Box>
+              </Box>
+
+              {user?.circle_name && (
+                <Box
+                  sx={{
+                    bgcolor: "rgba(255,255,255,0.08)",
+                    px: 2,
+                    py: 1,
+                    borderRadius: 2,
+                    border: "1px solid rgba(255,255,255,0.18)"
+                  }}
+                >
+                  <Typography variant="caption" sx={{ color: "#94a3b8", display: "block", textTransform: "uppercase", fontWeight: 700, letterSpacing: 0.5 }}>
+                    Target Circle
+                  </Typography>
+                  <Typography variant="body2" fontWeight="bold" sx={{ color: "#38bdf8" }}>
+                    {user.circle_name}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          </Paper>
+
+          {/* Active Circle Context & Isolation Signal */}
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              mb: 3,
+              borderRadius: 2.5,
+              border: "1px solid #bae6fd",
+              bgcolor: "#f0f9ff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 2
+            }}
+          >
+            <Box display="flex" alignItems="center" gap={1.5}>
+              <Box
+                sx={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: "50%",
+                  bgcolor: "#10b981",
+                  boxShadow: "0 0 0 3px rgba(16, 185, 129, 0.25)"
+                }}
+              />
               <Box>
-                <Typography variant="h4" fontWeight="bold">
-                  Add New Expense
+                <Typography variant="subtitle2" fontWeight="bold" color="#0c4a6e">
+                  Posting to: {user?.circle_name || "Paul Family"}
                 </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Log a household transaction and automatically partition shares across members.
+                <Typography variant="caption" color="#0369a1">
+                  This transaction is completely isolated and will only be visible and split among members of this circle.
                 </Typography>
               </Box>
             </Box>
+
+            {user?.family_code && (
+              <Chip
+                label={`Invite Code: ${user.family_code}`}
+                size="small"
+                sx={{
+                  bgcolor: "#ffffff",
+                  fontWeight: "bold",
+                  fontSize: "0.75rem",
+                  color: "#0284c7",
+                  border: "1px solid #7dd3fc"
+                }}
+              />
+            )}
           </Paper>
 
           {/* Form Card */}

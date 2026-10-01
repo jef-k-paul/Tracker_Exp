@@ -21,7 +21,8 @@ import {
   Divider,
   Alert,
   IconButton,
-  Popover
+  Popover,
+  InputAdornment
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
@@ -35,8 +36,11 @@ import VpnKeyIcon from "@mui/icons-material/VpnKey";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import ShuffleIcon from "@mui/icons-material/Shuffle";
 import LogoutIcon from "@mui/icons-material/Logout";
+import EditIcon from "@mui/icons-material/Edit";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { exportMonthlyStatementPDF, exportExpensesCSV } from "../../utils/exportUtils";
-import { getMyCircles, switchCircle, joinCircle, createCircle } from "../../services/apiServices";
+import { getMyCircles, switchCircle, joinCircle, createCircle, updateEmail, getMyProfile } from "../../services/apiServices";
 import NotificationBell from "./NotificationBell";
 
 // Funny random character profiles
@@ -80,19 +84,31 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
   const openCircleMenu = Boolean(circleAnchorEl);
 
   // Fallback to localStorage if currentUser not passed directly
-  let user = currentUser;
-  if (!user) {
+  let initialUser = currentUser;
+  if (!initialUser) {
     try {
-      user = JSON.parse(localStorage.getItem("user") || "null");
+      initialUser = JSON.parse(localStorage.getItem("user") || "null");
     } catch (e) {
-      user = null;
+      initialUser = null;
     }
   }
+  const [user, setUser] = useState(initialUser);
 
   // Profile popover & funny character state
   const [profileAnchorEl, setProfileAnchorEl] = useState(null);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedAccessKey, setCopiedAccessKey] = useState(false);
   const [funnyCharOffset, setFunnyCharOffset] = useState(0);
+
+  // Edit Email Modal states
+  const [showEditEmailModal, setShowEditEmailModal] = useState(false);
+  const [newEmailInput, setNewEmailInput] = useState("");
+  const [confirmEmailInput, setConfirmEmailInput] = useState("");
+  const [verificationKeyInput, setVerificationKeyInput] = useState("");
+  const [showVerificationKey, setShowVerificationKey] = useState(false);
+  const [editEmailLoading, setEditEmailLoading] = useState(false);
+  const [editEmailError, setEditEmailError] = useState("");
+  const [editEmailSuccess, setEditEmailSuccess] = useState("");
 
   const baseCharIndex = getDeterministicIndex(user?.email || user?.name || "User");
   const currentCharIndex = (baseCharIndex + funnyCharOffset) % FUNNY_CHARACTERS.length;
@@ -118,17 +134,103 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
     }
   };
 
+  const handleOpenEditEmail = () => {
+    setProfileAnchorEl(null); // Close popover
+    setNewEmailInput("");
+    setConfirmEmailInput("");
+    setVerificationKeyInput("");
+    setEditEmailError("");
+    setEditEmailSuccess("");
+    setShowEditEmailModal(true);
+  };
+
+  const handleUpdateEmailSubmit = async (e) => {
+    if (e) e.preventDefault();
+    const cleanNew = newEmailInput.trim();
+    const cleanConfirm = confirmEmailInput.trim();
+    const cleanKey = verificationKeyInput.trim();
+
+    if (!cleanNew || !cleanNew.includes("@")) {
+      setEditEmailError("Please enter a valid new email address.");
+      return;
+    }
+    if (cleanNew.toLowerCase() !== cleanConfirm.toLowerCase()) {
+      setEditEmailError("New email and confirmation email do not match.");
+      return;
+    }
+    if (cleanNew.toLowerCase() === (user?.email || "").toLowerCase()) {
+      setEditEmailError("New email must be different from your current email.");
+      return;
+    }
+    if (!cleanKey) {
+      setEditEmailError("Please enter your current password or Access ID for verification.");
+      return;
+    }
+
+    setEditEmailLoading(true);
+    setEditEmailError("");
+    setEditEmailSuccess("");
+
+    try {
+      const res = await updateEmail({
+        newEmail: cleanNew,
+        confirmEmail: cleanConfirm,
+        verificationKey: cleanKey
+      });
+
+      const updatedUser = res.data.user;
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      if (res.data.token) {
+        localStorage.setItem("token", res.data.token);
+      }
+      setUser(updatedUser);
+
+      setEditEmailSuccess("Email address updated successfully!");
+      setEditEmailLoading(false);
+
+      setTimeout(() => {
+        setShowEditEmailModal(false);
+        window.location.reload();
+      }, 1000);
+    } catch (err) {
+      const msg = err.response?.data?.message || "Failed to update email. Please check your credentials.";
+      setEditEmailError(msg);
+      setEditEmailLoading(false);
+    }
+  };
+
+  // Sync state if currentUser prop changes from parent
   useEffect(() => {
-    // Fetch circles if user is logged in
-    if (user && (user.userId || user.user_id || user.member_id)) {
-      getMyCircles()
+    if (currentUser) {
+      setUser(currentUser);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    // Always fetch fresh profile and circles from DB if token exists
+    const token = localStorage.getItem("token");
+    if (token) {
+      getMyProfile()
         .then((res) => {
+          if (res.data?.user) {
+            localStorage.setItem("user", JSON.stringify(res.data.user));
+            if (res.data.token) {
+              localStorage.setItem("token", res.data.token);
+            }
+            setUser(res.data.user);
+          }
           if (res.data?.circles) {
             setMyCircles(res.data.circles);
           }
         })
         .catch(() => {
-          // Ignore if unauthenticated
+          getMyCircles()
+            .then((res) => {
+              if (res.data?.circles) {
+                setMyCircles(res.data.circles);
+              }
+            })
+            .catch(() => {});
         });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -522,15 +624,37 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
 
                 <Divider sx={{ my: 1.5 }} />
 
-                {/* Personal Information */}
+                {/* Personal Information with Edit Email Pen Button */}
                 <Box mb={1.5}>
                   <Box display="flex" justifyContent="space-between" alignItems="center" py={0.3}>
                     <Typography variant="caption" color="text.secondary">
                       Email Address:
                     </Typography>
-                    <Typography variant="body2" fontWeight={600} noWrap sx={{ maxWidth: 175 }}>
-                      {user?.email || "No email"}
-                    </Typography>
+                    <Box display="flex" alignItems="center" gap={0.5}>
+                      <Tooltip title={user?.email || "No email"}>
+                        <Typography
+                          variant="body2"
+                          fontWeight={600}
+                          noWrap
+                          sx={{ maxWidth: 165, cursor: "pointer", color: "text.primary" }}
+                        >
+                          {user?.email || "No email"}
+                        </Typography>
+                      </Tooltip>
+                      <Tooltip title="Edit email address">
+                        <IconButton
+                          size="small"
+                          onClick={handleOpenEditEmail}
+                          sx={{
+                            p: 0.4,
+                            color: "#0284c7",
+                            "&:hover": { bgcolor: "rgba(2, 132, 199, 0.1)" }
+                          }}
+                        >
+                          <EditIcon sx={{ fontSize: "0.92rem" }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   </Box>
                   <Box display="flex" justifyContent="space-between" alignItems="center" py={0.3}>
                     <Typography variant="caption" color="text.secondary">
@@ -539,6 +663,31 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
                     <Typography variant="body2" fontWeight={600}>
                       #{user?.member_id || user?.memberId || "1"}
                     </Typography>
+                  </Box>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" py={0.3}>
+                    <Typography variant="caption" color="text.secondary">
+                      Access ID:
+                    </Typography>
+                    <Box display="flex" alignItems="center" gap={0.5}>
+                      <Typography variant="body2" fontWeight={700} sx={{ color: "#0284c7" }}>
+                        {user?.accessKey || user?.access_key || "N/A"}
+                      </Typography>
+                      {(user?.accessKey || user?.access_key) && (
+                        <Tooltip title={copiedAccessKey ? "Copied Access ID!" : "Copy Access ID"}>
+                          <IconButton
+                            size="small"
+                            onClick={() => {
+                              navigator.clipboard.writeText(user.accessKey || user.access_key);
+                              setCopiedAccessKey(true);
+                              setTimeout(() => setCopiedAccessKey(false), 2000);
+                            }}
+                            sx={{ p: 0.3 }}
+                          >
+                            <ContentCopyIcon sx={{ fontSize: "0.85rem", color: copiedAccessKey ? "#10b981" : "inherit" }} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Box>
                   </Box>
                 </Box>
 
@@ -605,6 +754,108 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
           </Button>
         </Box>
       </Toolbar>
+
+      {/* DIALOG FOR EDITING EMAIL ADDRESS */}
+      <Dialog
+        open={showEditEmailModal}
+        onClose={() => !editEmailLoading && setShowEditEmailModal(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 1, fontWeight: "bold", textAlign: "center" }}>
+          Update Email Address ✏️
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" mb={2} textAlign="center">
+            Enter your new email address and confirm your identity with your current password or Access ID.
+          </Typography>
+
+          {editEmailError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {editEmailError}
+            </Alert>
+          )}
+
+          {editEmailSuccess && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {editEmailSuccess}
+            </Alert>
+          )}
+
+          <Box component="form" onSubmit={handleUpdateEmailSubmit}>
+            <TextField
+              fullWidth
+              label="New Email Address"
+              type="email"
+              value={newEmailInput}
+              onChange={(e) => setNewEmailInput(e.target.value)}
+              placeholder="e.g. new_email@example.com"
+              required
+              disabled={editEmailLoading}
+              sx={{ mb: 2, mt: 1 }}
+            />
+
+            <TextField
+              fullWidth
+              label="Confirm New Email Address"
+              type="email"
+              value={confirmEmailInput}
+              onChange={(e) => setConfirmEmailInput(e.target.value)}
+              placeholder="Re-enter new email address"
+              required
+              disabled={editEmailLoading}
+              sx={{ mb: 2 }}
+            />
+
+            <TextField
+              fullWidth
+              label="Current Password / Access ID"
+              type={showVerificationKey ? "text" : "password"}
+              value={verificationKeyInput}
+              onChange={(e) => setVerificationKeyInput(e.target.value)}
+              placeholder="Password, PIN, or Access ID"
+              required
+              disabled={editEmailLoading}
+              helperText="Required to verify account ownership"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowVerificationKey(!showVerificationKey)}
+                      edge="end"
+                      size="small"
+                    >
+                      {showVerificationKey ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                    </IconButton>
+                  </InputAdornment>
+                )
+              }}
+              sx={{ mb: 2.5 }}
+            />
+
+            <Box display="flex" gap={1.5} justifyContent="flex-end">
+              <Button
+                variant="outlined"
+                onClick={() => setShowEditEmailModal(false)}
+                disabled={editEmailLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={editEmailLoading}
+                sx={{
+                  fontWeight: "bold",
+                  background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)"
+                }}
+              >
+                {editEmailLoading ? <CircularProgress size={20} color="inherit" /> : "Save Email"}
+              </Button>
+            </Box>
+          </Box>
+        </DialogContent>
+      </Dialog>
 
       {/* DIALOG FOR JOINING OR CREATING A CIRCLE */}
       <Dialog open={showCircleModal} onClose={() => setShowCircleModal(false)} maxWidth="xs" fullWidth>

@@ -53,9 +53,19 @@ export const login = (accessKey) => {
     return api.post("/auth/login", { accessKey });
 };
 
-// Register individual user account
-export const registerUser = ({ email, password, name }) => {
-    return api.post("/auth/register", { email, password, name });
+// Register individual user account (with optional/generated accessKey)
+export const registerUser = ({ email, password, name, accessKey }) => {
+    return api.post("/auth/register", { email, password, name, accessKey });
+};
+
+// Generate fresh unique Access ID preview based on first name
+export const generateAccessKey = (name) => {
+    return api.get(`/auth/generate-key?name=${encodeURIComponent(name || "")}`);
+};
+
+// Update user email with verification
+export const updateEmail = ({ newEmail, confirmEmail, verificationKey }) => {
+    return api.post("/auth/update-email", { newEmail, confirmEmail, verificationKey });
 };
 
 // Request 6-digit OTP for password reset
@@ -88,18 +98,25 @@ export const getMyCircles = () => {
     return api.get("/auth/my-circles");
 };
 
-//Get sumary 
-export const getSummary = (month, year) =>{
-    return api.get(`/summary?month=${month}&year=${year}`);
-
+// Get current user profile fresh from DB
+export const getMyProfile = () => {
+    return api.get("/auth/me");
 };
 
-export const getExpenses = (month, year) => {
-    return api.get(`/expenses?month=${month}&year=${year}`);
+//Get summary 
+export const getSummary = (month, year, circleId = null) => {
+    const url = circleId ? `/summary?month=${month}&year=${year}&circleId=${circleId}` : `/summary?month=${month}&year=${year}`;
+    return api.get(url);
 };
 
-export const getSettlements = (month, year) => {
-    return api.get(`/settlements?month=${month}&year=${year}`);
+export const getExpenses = (month, year, circleId = null) => {
+    const url = circleId ? `/expenses?month=${month}&year=${year}&circleId=${circleId}` : `/expenses?month=${month}&year=${year}`;
+    return api.get(url);
+};
+
+export const getSettlements = (month, year, circleId = null) => {
+    const url = circleId ? `/settlements?month=${month}&year=${year}&circleId=${circleId}` : `/settlements?month=${month}&year=${year}`;
+    return api.get(url);
 };
 
 export const initiateSettlement = (payload) => {
@@ -122,8 +139,9 @@ export const getPendingSettlementsCount = () => {
     return api.get("/settlements/pending-count");
 };
 
-export const getMembers = () => {
-    return api.get("/members");
+export const getMembers = (circleId = null) => {
+    const url = circleId ? `/members?circleId=${circleId}` : `/members`;
+    return api.get(url);
 };
 
 export const getCategories = () => {
@@ -134,8 +152,12 @@ export const addExpense = (expense) => {
     return api.post("/expenses", expense);
 };
 
-export const checkDuplicateExpense = (amount, categoryId, date) => {
-    return api.get(`/expenses/check-duplicate?amount=${amount}&categoryId=${categoryId}&date=${date}`);
+export const checkDuplicateExpense = (amount, categoryId, date, circleId = null) => {
+    let url = `/expenses/check-duplicate?amount=${amount}&categoryId=${categoryId}&date=${date}`;
+    if (circleId) {
+        url += `&circleId=${circleId}`;
+    }
+    return api.get(url);
 };
 
 export const getAllTimePaid = (memberId) => {

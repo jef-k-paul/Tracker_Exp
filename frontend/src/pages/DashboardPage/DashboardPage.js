@@ -12,7 +12,7 @@ import {
   Divider,
   Paper
 } from "@mui/material";
-import { getSummary, getSettlements, getExpenses } from "../../services/apiServices";
+import { getSummary, getSettlements, getExpenses, getMyProfile } from "../../services/apiServices";
 
 class DashboardPage extends Component {
   constructor(props) {
@@ -43,6 +43,19 @@ class DashboardPage extends Component {
       window.location.href = "/";
       return;
     }
+
+    // Refresh user profile directly from DB to sync any edited email/credentials
+    getMyProfile()
+      .then((res) => {
+        if (res.data?.user) {
+          localStorage.setItem("user", JSON.stringify(res.data.user));
+          if (res.data.token) {
+            localStorage.setItem("token", res.data.token);
+          }
+          this.setState({ user: res.data.user });
+        }
+      })
+      .catch(() => {});
 
     this.fetchDashboardData(this.state.selectedMonth, this.state.selectedYear);
   }

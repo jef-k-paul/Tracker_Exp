@@ -16,7 +16,8 @@ import {
   Chip,
   Dialog,
   DialogTitle,
-  DialogContent
+  DialogContent,
+  Tooltip
 } from "@mui/material";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
@@ -26,6 +27,7 @@ import MarkEmailReadOutlinedIcon from "@mui/icons-material/MarkEmailReadOutlined
 import GroupsIcon from "@mui/icons-material/Groups";
 import GroupAddIcon from "@mui/icons-material/GroupAdd";
 import VpnKeyIcon from "@mui/icons-material/VpnKey";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import {
   loginWithCredentials,
   login as loginWithKey,
@@ -41,8 +43,9 @@ class LoginPage extends Component {
     super(props);
 
     this.state = {
-      // 0: Sign In, 1: Register, 2: Forgot Password, 3: Legacy Key Login
+      // 0: Access Key (Default Landing), 1: Email Sign In, 2: Register, 3: Reset OTP (dynamic)
       activeTab: 0,
+      showResetTab: false,
 
       // Form inputs
       email: "",
@@ -50,6 +53,8 @@ class LoginPage extends Component {
       name: "",
       showPassword: false,
       accessKey: "",
+      registerAccessKey: "",
+      userEditedKey: false,
 
       // Password Reset with OTP
       otpSent: false,
@@ -89,6 +94,16 @@ class LoginPage extends Component {
   handleTabChange = (event, newValue) => {
     this.setState({
       activeTab: newValue,
+      error: "",
+      successMsg: "",
+      showResetTab: newValue === 3
+    });
+  };
+
+  handleOpenResetTab = () => {
+    this.setState({
+      showResetTab: true,
+      activeTab: 3,
       error: "",
       successMsg: ""
     });
@@ -158,10 +173,36 @@ class LoginPage extends Component {
       });
   };
 
+  // Generate short, crisp, unique Access ID from first name
+  generateKeyFromName = (fullName) => {
+    const rawFirst = (fullName || "").trim().split(/\s+/)[0] || "USER";
+    let cleanFirst = rawFirst.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    if (cleanFirst.length > 5) {
+      cleanFirst = cleanFirst.slice(0, 5);
+    }
+    if (!cleanFirst) cleanFirst = "USER";
+    const randNum = Math.floor(100 + Math.random() * 900);
+    return `${cleanFirst}-${randNum}`;
+  };
+
+  handleNameChange = (e) => {
+    const newName = e.target.value;
+    const updates = { name: newName };
+    if (!this.state.userEditedKey) {
+      updates.registerAccessKey = this.generateKeyFromName(newName);
+    }
+    this.setState(updates);
+  };
+
+  handleRefreshKey = () => {
+    const key = this.generateKeyFromName(this.state.name);
+    this.setState({ registerAccessKey: key, userEditedKey: true });
+  };
+
   // 2. Handle User Registration
   handleRegister = (e) => {
     if (e) e.preventDefault();
-    const { name, email, password } = this.state;
+    const { name, email, password, registerAccessKey } = this.state;
 
     if (!name.trim()) {
       this.setState({ error: "Please enter your full name." });
@@ -181,7 +222,8 @@ class LoginPage extends Component {
     registerUser({
       name: name.trim(),
       email: email.trim(),
-      password
+      password,
+      accessKey: registerAccessKey.trim() || undefined
     })
       .then((res) => {
         this.handleAuthSuccess(res.data);
@@ -208,7 +250,8 @@ class LoginPage extends Component {
       .then((res) => {
         this.setState({
           otpSent: true,
-          successMsg: res.data?.message || "6-digit OTP code sent! Check your inbox (or dev console).",
+          otpCode: res.data?.otp || "",
+          successMsg: res.data?.message || "6-digit OTP code sent!",
           loading: false
         });
       })
@@ -242,11 +285,12 @@ class LoginPage extends Component {
       .then((res) => {
         this.setState({
           activeTab: 0,
+          showResetTab: false,
           otpSent: false,
           password: "",
           otpCode: "",
           newPassword: "",
-          successMsg: res.data?.message || "Password reset successful! Please sign in.",
+          successMsg: res.data?.message || "Password reset successful! Please sign in with your credentials or Access ID.",
           loading: false
         });
       })
@@ -327,11 +371,13 @@ class LoginPage extends Component {
   render() {
     const {
       activeTab,
+      showResetTab,
       email,
       password,
       name,
       showPassword,
       accessKey,
+      registerAccessKey,
       otpSent,
       otpCode,
       newPassword,
@@ -393,9 +439,15 @@ class LoginPage extends Component {
               indicatorColor="primary"
             >
               <Tab
+                icon={<VpnKeyIcon fontSize="small" />}
+                iconPosition="start"
+                label="Access Key"
+                sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
+              />
+              <Tab
                 icon={<LockOutlinedIcon fontSize="small" />}
                 iconPosition="start"
-                label="Sign In"
+                label="Email Sign In"
                 sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
               />
               <Tab
@@ -404,18 +456,14 @@ class LoginPage extends Component {
                 label="Register"
                 sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
               />
-              <Tab
-                icon={<MarkEmailReadOutlinedIcon fontSize="small" />}
-                iconPosition="start"
-                label="Reset OTP"
-                sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
-              />
-              <Tab
-                icon={<VpnKeyIcon fontSize="small" />}
-                iconPosition="start"
-                label="Access Key"
-                sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
-              />
+              {showResetTab && (
+                <Tab
+                  icon={<MarkEmailReadOutlinedIcon fontSize="small" />}
+                  iconPosition="start"
+                  label="Reset OTP"
+                  sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
+                />
+              )}
             </Tabs>
           </Box>
 
@@ -432,8 +480,104 @@ class LoginPage extends Component {
             </Alert>
           )}
 
-          {/* TAB 0: SIGN IN */}
+          {/* TAB 0: ACCESS KEY (PRIMARY 1-CLICK DEFAULT LOGIN) */}
           {activeTab === 0 && (
+            <Box component="form" onSubmit={this.handleLegacyLogin}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: "left" }}>
+                Enter your Personal Access ID for instant 1-click access:
+              </Typography>
+
+              <TextField
+                fullWidth
+                label="Personal Access ID"
+                variant="outlined"
+                value={accessKey}
+                onChange={this.handleChange("accessKey")}
+                placeholder="e.g. KEY1, JEFF-412"
+                required
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <VpnKeyIcon fontSize="small" sx={{ color: "#0284c7" }} />
+                    </InputAdornment>
+                  )
+                }}
+                sx={{ mb: 1.5 }}
+              />
+
+              <Box display="flex" justifyContent="flex-end" mb={2}>
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={this.handleOpenResetTab}
+                  sx={{ textTransform: "none", fontSize: "0.82rem", color: "#0284c7" }}
+                >
+                  Forgot Access ID? Reset with OTP
+                </Button>
+              </Box>
+
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                size="large"
+                disabled={loading}
+                sx={{
+                  py: 1.4,
+                  fontWeight: "bold",
+                  borderRadius: 2,
+                  background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+                  "&:hover": { background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)" }
+                }}
+              >
+                {loading ? <CircularProgress size={24} color="inherit" /> : "Sign In with Access ID"}
+              </Button>
+
+              {/* Quick Fill Test Accounts */}
+              <Box mt={3} p={1.5} sx={{ bgcolor: "#f8fafc", borderRadius: 2, border: "1px dashed #cbd5e1" }}>
+                <Typography variant="caption" color="text.secondary" display="block" mb={1} fontWeight={600}>
+                  Quick Fill Test Access IDs:
+                </Typography>
+                <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">
+                  <Chip
+                    label="Dad (KEY1)"
+                    size="small"
+                    clickable
+                    color="primary"
+                    variant="outlined"
+                    onClick={() => this.setState({ accessKey: "KEY1", error: "", successMsg: "" })}
+                  />
+                  <Chip
+                    label="Mom (KEY2)"
+                    size="small"
+                    clickable
+                    color="secondary"
+                    variant="outlined"
+                    onClick={() => this.setState({ accessKey: "KEY2", error: "", successMsg: "" })}
+                  />
+                  <Chip
+                    label="Son (KEY3)"
+                    size="small"
+                    clickable
+                    color="info"
+                    variant="outlined"
+                    onClick={() => this.setState({ accessKey: "KEY3", error: "", successMsg: "" })}
+                  />
+                  <Chip
+                    label="Sister (KEY4)"
+                    size="small"
+                    clickable
+                    color="success"
+                    variant="outlined"
+                    onClick={() => this.setState({ accessKey: "KEY4", error: "", successMsg: "" })}
+                  />
+                </Stack>
+              </Box>
+            </Box>
+          )}
+
+          {/* TAB 1: EMAIL & PASSWORD SIGN IN */}
+          {activeTab === 1 && (
             <Box component="form" onSubmit={this.handleSignIn}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: "left" }}>
                 Sign in with your email and password or 6-digit PIN:
@@ -469,14 +613,14 @@ class LoginPage extends Component {
                     </InputAdornment>
                   )
                 }}
-                sx={{ mb: 2 }}
+                sx={{ mb: 1.5 }}
               />
 
               <Box display="flex" justifyContent="flex-end" mb={2}>
                 <Button
                   variant="text"
                   size="small"
-                  onClick={() => this.setState({ activeTab: 2, error: "", successMsg: "" })}
+                  onClick={this.handleOpenResetTab}
                   sx={{ textTransform: "none", fontSize: "0.82rem", color: "#0284c7" }}
                 >
                   Forgot password? Reset with OTP
@@ -497,7 +641,7 @@ class LoginPage extends Component {
                   "&:hover": { background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)" }
                 }}
               >
-                {loading ? <CircularProgress size={24} color="inherit" /> : "Sign In"}
+                {loading ? <CircularProgress size={24} color="inherit" /> : "Sign In with Email"}
               </Button>
 
               {/* Quick Fill Test Accounts */}
@@ -512,7 +656,7 @@ class LoginPage extends Component {
                     clickable
                     color="primary"
                     variant="outlined"
-                    onClick={() => this.handleQuickFill("dad@paul.com", "family123")}
+                    onClick={() => this.handleQuickFill("pauljerryk@gmail.com", "family123")}
                   />
                   <Chip
                     label="Mom"
@@ -528,7 +672,7 @@ class LoginPage extends Component {
                     clickable
                     color="info"
                     variant="outlined"
-                    onClick={() => this.handleQuickFill("son@paul.com", "family123")}
+                    onClick={() => this.handleQuickFill("jeffrey.kpaul14@gmail.com", "family123")}
                   />
                   <Chip
                     label="Sister"
@@ -543,8 +687,8 @@ class LoginPage extends Component {
             </Box>
           )}
 
-          {/* TAB 1: REGISTER */}
-          {activeTab === 1 && (
+          {/* TAB 2: REGISTER */}
+          {activeTab === 2 && (
             <Box component="form" onSubmit={this.handleRegister}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: "left" }}>
                 Create your individual personal account:
@@ -555,9 +699,36 @@ class LoginPage extends Component {
                 label="Full Name"
                 variant="outlined"
                 value={name}
-                onChange={this.handleChange("name")}
-                placeholder="e.g. John Doe"
+                onChange={this.handleNameChange}
+                placeholder="e.g. Jeffrey Paul or Jeffrey"
                 required
+                sx={{ mb: 2 }}
+              />
+
+              <TextField
+                fullWidth
+                label="Personal Access ID (1-Click Login Key)"
+                variant="outlined"
+                value={registerAccessKey}
+                onChange={(e) => this.setState({ registerAccessKey: e.target.value.toUpperCase(), userEditedKey: true })}
+                placeholder="e.g. JEFF-412"
+                helperText="Auto-generated from your first name. Click refresh to get another unique combination or edit directly."
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <VpnKeyIcon fontSize="small" sx={{ color: "#0284c7" }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title="Generate another unique Access ID">
+                        <IconButton onClick={this.handleRefreshKey} edge="end" size="small" sx={{ color: "#0284c7" }}>
+                          <RefreshIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  )
+                }}
                 sx={{ mb: 2 }}
               />
 
@@ -613,8 +784,8 @@ class LoginPage extends Component {
             </Box>
           )}
 
-          {/* TAB 2: FORGOT PASSWORD / RESET OTP */}
-          {activeTab === 2 && (
+          {/* TAB 3: FORGOT PASSWORD / RESET OTP (DYNAMIC) */}
+          {activeTab === 3 && (
             <Box component="form" onSubmit={!otpSent ? this.handleRequestOtp : this.handleResetPassword}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: "left" }}>
                 {!otpSent
@@ -695,55 +866,26 @@ class LoginPage extends Component {
                 )}
               </Button>
 
-              {otpSent && (
-                <Box mt={2}>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mt={2}>
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={() => this.setState({ activeTab: 0, showResetTab: false, error: "", successMsg: "" })}
+                  sx={{ textTransform: "none", color: "text.secondary" }}
+                >
+                  ← Back to Access Key Login
+                </Button>
+                {otpSent && (
                   <Button
                     variant="text"
                     size="small"
                     onClick={() => this.setState({ otpSent: false, otpCode: "", error: "", successMsg: "" })}
-                    sx={{ textTransform: "none", color: "text.secondary" }}
+                    sx={{ textTransform: "none", color: "#0284c7" }}
                   >
                     Resend Code or Change Email
                   </Button>
-                </Box>
-              )}
-            </Box>
-          )}
-
-          {/* TAB 3: LEGACY ACCESS KEY LOGIN */}
-          {activeTab === 3 && (
-            <Box component="form" onSubmit={this.handleLegacyLogin}>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: "left" }}>
-                Legacy access for backward compatibility (KEY1 - KEY4):
-              </Typography>
-
-              <TextField
-                fullWidth
-                label="Personal Access ID"
-                variant="outlined"
-                value={accessKey}
-                onChange={this.handleChange("accessKey")}
-                placeholder="e.g. KEY1, KEY2"
-                required
-                sx={{ mb: 2.5 }}
-              />
-
-              <Button
-                type="submit"
-                fullWidth
-                variant="contained"
-                size="large"
-                disabled={loading}
-                sx={{
-                  py: 1.4,
-                  fontWeight: "bold",
-                  borderRadius: 2,
-                  background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
-                  "&:hover": { background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)" }
-                }}
-              >
-                {loading ? <CircularProgress size={24} color="inherit" /> : "Log In with Key"}
-              </Button>
+                )}
+              </Box>
             </Box>
           )}
         </Paper>
@@ -767,6 +909,12 @@ class LoginPage extends Component {
               <Tab label="Join Circle" icon={<VpnKeyIcon fontSize="small" />} iconPosition="start" />
               <Tab label="Create Circle" icon={<GroupAddIcon fontSize="small" />} iconPosition="start" />
             </Tabs>
+
+            {error && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {error}
+              </Alert>
+            )}
 
             {circleModalTab === 0 ? (
               <Box>
