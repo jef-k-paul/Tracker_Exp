@@ -103,6 +103,35 @@ export const getMyProfile = () => {
     return api.get("/auth/me");
 };
 
+// Circle Member Management & Leave Flow
+export const getCircleMembers = (circleId) => {
+    return api.get(`/auth/circles/${circleId}/members`);
+};
+
+export const removeCircleMember = (circleId, memberId) => {
+    return api.delete(`/auth/circles/${circleId}/members/${memberId}`);
+};
+
+export const requestLeaveCircle = (circleId) => {
+    return api.post(`/auth/circles/${circleId}/leave`);
+};
+
+export const cancelLeaveCircle = (circleId) => {
+    return api.post(`/auth/circles/${circleId}/cancel-leave`);
+};
+
+export const getPendingLeaveRequests = () => {
+    return api.get("/auth/circles/pending-leaves");
+};
+
+export const approveLeaveRequest = (requestId) => {
+    return api.post(`/auth/circles/leave-requests/${requestId}/approve`);
+};
+
+export const rejectLeaveRequest = (requestId) => {
+    return api.post(`/auth/circles/leave-requests/${requestId}/reject`);
+};
+
 //Get summary 
 export const getSummary = (month, year, circleId = null) => {
     const url = circleId ? `/summary?month=${month}&year=${year}&circleId=${circleId}` : `/summary?month=${month}&year=${year}`;

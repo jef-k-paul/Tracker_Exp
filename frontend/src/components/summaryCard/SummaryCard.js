@@ -74,19 +74,19 @@ const SummaryCard = ({
   return (
     <Box sx={{ mb: 4 }}>
       {/* Month & Year Filter Bar */}
-      <Paper elevation={2} sx={{ p: 2, mb: 3, borderRadius: 2, backgroundColor: "#f8fafc" }}>
+      <Paper elevation={2} sx={{ p: { xs: 1.5, sm: 2 }, mb: 3, borderRadius: 2, backgroundColor: "#f8fafc" }}>
         <Stack
           direction={{ xs: "column", sm: "row" }}
-          spacing={2}
-          alignItems="center"
+          spacing={1.5}
+          alignItems={{ xs: "stretch", sm: "center" }}
           justifyContent="space-between"
         >
-          <Typography variant="h6" fontWeight="bold" color="primary">
+          <Typography variant="h6" fontWeight="bold" color="primary" sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}>
             Monthly Summary & Filter
           </Typography>
 
-          <Stack direction="row" spacing={2}>
-            <FormControl size="small" sx={{ minWidth: 140 }}>
+          <Stack direction="row" spacing={1.5} sx={{ width: { xs: "100%", sm: "auto" } }}>
+            <FormControl size="small" sx={{ flex: 1, minWidth: { xs: 120, sm: 140 } }}>
               <InputLabel id="month-select-label">Month</InputLabel>
               <Select
                 labelId="month-select-label"
@@ -102,7 +102,7 @@ const SummaryCard = ({
               </Select>
             </FormControl>
 
-            <FormControl size="small" sx={{ minWidth: 100 }}>
+            <FormControl size="small" sx={{ flex: { xs: 0.8, sm: "unset" }, minWidth: { xs: 85, sm: 100 } }}>
               <InputLabel id="year-select-label">Year</InputLabel>
               <Select
                 labelId="year-select-label"
@@ -146,8 +146,8 @@ const SummaryCard = ({
         {/* Total Family Expense (Clickable - Opens Category Breakdown Modal) */}
         <Box
           sx={{
-            flex: { xs: "0 0 82%", sm: "0 0 45%", md: "unset" },
-            minWidth: { xs: "270px", sm: "280px", md: "unset" },
+            flex: { xs: "0 0 84%", sm: "0 0 45%", md: "unset" },
+            minWidth: { xs: "240px", sm: "270px", md: "unset" },
             scrollSnapAlign: "start"
           }}
         >
@@ -227,8 +227,8 @@ const SummaryCard = ({
         {/* Logged-in User Paid (Interactive 3D Flip Card) */}
         <Box
           sx={{
-            flex: { xs: "0 0 82%", sm: "0 0 45%", md: "unset" },
-            minWidth: { xs: "270px", sm: "280px", md: "unset" },
+            flex: { xs: "0 0 84%", sm: "0 0 45%", md: "unset" },
+            minWidth: { xs: "240px", sm: "270px", md: "unset" },
             scrollSnapAlign: "start"
           }}
         >
@@ -243,8 +243,8 @@ const SummaryCard = ({
         {/* Logged-in User Share (Interactive 3D Flip Card - Total Share Expense) */}
         <Box
           sx={{
-            flex: { xs: "0 0 82%", sm: "0 0 45%", md: "unset" },
-            minWidth: { xs: "270px", sm: "280px", md: "unset" },
+            flex: { xs: "0 0 84%", sm: "0 0 45%", md: "unset" },
+            minWidth: { xs: "240px", sm: "270px", md: "unset" },
             scrollSnapAlign: "start"
           }}
         >
@@ -259,8 +259,8 @@ const SummaryCard = ({
         {/* Logged-in User Net Expense Position */}
         <Box
           sx={{
-            flex: { xs: "0 0 82%", sm: "0 0 45%", md: "unset" },
-            minWidth: { xs: "270px", sm: "280px", md: "unset" },
+            flex: { xs: "0 0 84%", sm: "0 0 45%", md: "unset" },
+            minWidth: { xs: "240px", sm: "270px", md: "unset" },
             scrollSnapAlign: "start"
           }}
         >
@@ -310,12 +310,12 @@ const SummaryCard = ({
       </Box>
 
       {/* Per Person Breakdown Table */}
-      <Paper elevation={3} sx={{ p: 2, borderRadius: 3 }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>
+      <Paper elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, borderRadius: 3 }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ mb: 2, fontSize: { xs: "1rem", sm: "1.25rem" } }}>
           Family Members Breakdown
         </Typography>
-        <TableContainer>
-          <Table size="small">
+        <TableContainer sx={{ overflowX: "auto", maxWidth: "100%", WebkitOverflowScrolling: "touch" }}>
+          <Table size="small" sx={{ minWidth: 460 }}>
             <TableHead>
               <TableRow sx={{ backgroundColor: "#f1f5f9" }}>
                 <TableCell sx={{ fontWeight: "bold" }}>Member Name</TableCell>

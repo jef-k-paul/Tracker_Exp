@@ -12,7 +12,6 @@ import {
   InputAdornment,
   IconButton,
   CircularProgress,
-  Stack,
   Chip,
   Dialog,
   DialogTitle,
@@ -22,8 +21,6 @@ import {
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
-import PersonAddOutlinedIcon from "@mui/icons-material/PersonAddOutlined";
-import MarkEmailReadOutlinedIcon from "@mui/icons-material/MarkEmailReadOutlined";
 import GroupsIcon from "@mui/icons-material/Groups";
 import GroupAddIcon from "@mui/icons-material/GroupAdd";
 import VpnKeyIcon from "@mui/icons-material/VpnKey";
@@ -43,9 +40,10 @@ class LoginPage extends Component {
     super(props);
 
     this.state = {
-      // 0: Access Key (Default Landing), 1: Email Sign In, 2: Register, 3: Reset OTP (dynamic)
+      // 0: Access Key (Default Landing), 1: Email Sign In
       activeTab: 0,
-      showResetTab: false,
+      showRegister: false,
+      showReset: false,
 
       // Form inputs
       email: "",
@@ -94,16 +92,35 @@ class LoginPage extends Component {
   handleTabChange = (event, newValue) => {
     this.setState({
       activeTab: newValue,
+      showRegister: false,
+      showReset: false,
       error: "",
-      successMsg: "",
-      showResetTab: newValue === 3
+      successMsg: ""
+    });
+  };
+
+  handleOpenRegister = () => {
+    this.setState({
+      showRegister: true,
+      showReset: false,
+      error: "",
+      successMsg: ""
     });
   };
 
   handleOpenResetTab = () => {
     this.setState({
-      showResetTab: true,
-      activeTab: 3,
+      showReset: true,
+      showRegister: false,
+      error: "",
+      successMsg: ""
+    });
+  };
+
+  handleBackToLogin = () => {
+    this.setState({
+      showRegister: false,
+      showReset: false,
       error: "",
       successMsg: ""
     });
@@ -285,7 +302,8 @@ class LoginPage extends Component {
       .then((res) => {
         this.setState({
           activeTab: 0,
-          showResetTab: false,
+          showReset: false,
+          showRegister: false,
           otpSent: false,
           password: "",
           otpCode: "",
@@ -371,7 +389,8 @@ class LoginPage extends Component {
   render() {
     const {
       activeTab,
-      showResetTab,
+      showRegister,
+      showReset,
       email,
       password,
       name,
@@ -392,78 +411,83 @@ class LoginPage extends Component {
     } = this.state;
 
     return (
-      <Container maxWidth="sm" sx={{ py: { xs: 4, md: 8 } }}>
+      <Container maxWidth="sm" sx={{ py: { xs: 2, sm: 5, md: 8 }, px: { xs: 1.5, sm: 3 }, width: "100%" }}>
         <Paper
           elevation={4}
           sx={{
-            p: { xs: 3, sm: 4 },
-            borderRadius: 3.5,
+            p: { xs: 2, sm: 4 },
+            borderRadius: { xs: 2.5, sm: 3.5 },
             textAlign: "center",
             background: "#ffffff",
-            border: "1px solid rgba(226, 232, 240, 0.8)"
+            border: "1px solid rgba(226, 232, 240, 0.8)",
+            width: "100%",
+            boxSizing: "border-box"
           }}
         >
           {/* Header Branding */}
           <Box display="flex" justifyContent="center" alignItems="center" mb={1}>
             <Box
               sx={{
-                width: 48,
-                height: 48,
+                width: { xs: 40, sm: 48 },
+                height: { xs: 40, sm: 48 },
                 borderRadius: "50%",
                 background: "linear-gradient(135deg, #0f172a 0%, #38bdf8 100%)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 color: "#ffffff",
-                mr: 1.5
+                mr: { xs: 1, sm: 1.5 }
               }}
             >
-              <GroupsIcon fontSize="medium" />
+              <GroupsIcon sx={{ fontSize: { xs: 22, sm: 28 } }} />
             </Box>
-            <Typography variant="h5" fontWeight="bold" sx={{ letterSpacing: "-0.5px" }}>
+            <Typography
+              variant="h5"
+              fontWeight="bold"
+              sx={{ letterSpacing: "-0.5px", fontSize: { xs: "1.15rem", sm: "1.5rem" } }}
+            >
               Family Expense Tracker
             </Typography>
           </Box>
 
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mb: { xs: 2, sm: 3 }, fontSize: { xs: "0.78rem", sm: "0.875rem" }, px: { xs: 0.5, sm: 0 } }}
+          >
             Secure personal accounts, family circles & multi-tenant expense tracking
           </Typography>
 
-          {/* Navigation Tabs */}
+          {/* Navigation Tabs (Strictly 2 tabs: 50/50 fullWidth for clean, uncluttered mobile view) */}
           <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
             <Tabs
-              value={activeTab}
+              value={showRegister || showReset ? false : activeTab}
               onChange={this.handleTabChange}
               variant="fullWidth"
               textColor="primary"
               indicatorColor="primary"
+              sx={{
+                "& .MuiTab-root": {
+                  minHeight: 44,
+                  fontWeight: 600,
+                  fontSize: { xs: "0.8rem", sm: "0.95rem" },
+                  textTransform: "none",
+                  py: 1,
+                  px: { xs: 0.5, sm: 2 },
+                  minWidth: 0
+                }
+              }}
             >
               <Tab
-                icon={<VpnKeyIcon fontSize="small" />}
+                icon={<VpnKeyIcon sx={{ fontSize: { xs: "1rem", sm: "1.2rem" } }} />}
                 iconPosition="start"
                 label="Access Key"
-                sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
               />
               <Tab
-                icon={<LockOutlinedIcon fontSize="small" />}
+                icon={<LockOutlinedIcon sx={{ fontSize: { xs: "1rem", sm: "1.2rem" } }} />}
                 iconPosition="start"
                 label="Email Sign In"
-                sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
               />
-              <Tab
-                icon={<PersonAddOutlinedIcon fontSize="small" />}
-                iconPosition="start"
-                label="Register"
-                sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
-              />
-              {showResetTab && (
-                <Tab
-                  icon={<MarkEmailReadOutlinedIcon fontSize="small" />}
-                  iconPosition="start"
-                  label="Reset OTP"
-                  sx={{ textTransform: "none", fontWeight: 600, fontSize: "0.85rem" }}
-                />
-              )}
             </Tabs>
           </Box>
 
@@ -481,7 +505,7 @@ class LoginPage extends Component {
           )}
 
           {/* TAB 0: ACCESS KEY (PRIMARY 1-CLICK DEFAULT LOGIN) */}
-          {activeTab === 0 && (
+          {!showRegister && !showReset && activeTab === 0 && (
             <Box component="form" onSubmit={this.handleLegacyLogin}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: "left" }}>
                 Enter your Personal Access ID for instant 1-click access:
@@ -533,18 +557,55 @@ class LoginPage extends Component {
                 {loading ? <CircularProgress size={24} color="inherit" /> : "Sign In with Access ID"}
               </Button>
 
+              {/* Register Option in Access Key Section */}
+              <Box
+                mt={2.5}
+                p={1.5}
+                sx={{
+                  bgcolor: "rgba(2, 132, 199, 0.05)",
+                  borderRadius: 2,
+                  border: "1px solid rgba(2, 132, 199, 0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                  gap: 0.5
+                }}
+              >
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: "0.8rem", sm: "0.85rem" } }}>
+                  Don't have a Personal Access ID yet?
+                </Typography>
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={this.handleOpenRegister}
+                  sx={{
+                    textTransform: "none",
+                    fontWeight: 700,
+                    color: "#0284c7",
+                    fontSize: { xs: "0.8rem", sm: "0.85rem" },
+                    p: 0,
+                    minWidth: 0,
+                    "&:hover": { textDecoration: "underline", bgcolor: "transparent" }
+                  }}
+                >
+                  Register & Generate One →
+                </Button>
+              </Box>
+
               {/* Quick Fill Test Accounts */}
-              <Box mt={3} p={1.5} sx={{ bgcolor: "#f8fafc", borderRadius: 2, border: "1px dashed #cbd5e1" }}>
+              <Box mt={2.5} p={1.5} sx={{ bgcolor: "#f8fafc", borderRadius: 2, border: "1px dashed #cbd5e1" }}>
                 <Typography variant="caption" color="text.secondary" display="block" mb={1} fontWeight={600}>
                   Quick Fill Test Access IDs:
                 </Typography>
-                <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.6, justifyContent: "center" }}>
                   <Chip
                     label="Dad (KEY1)"
                     size="small"
                     clickable
                     color="primary"
                     variant="outlined"
+                    sx={{ fontSize: { xs: "0.72rem", sm: "0.78rem" } }}
                     onClick={() => this.setState({ accessKey: "KEY1", error: "", successMsg: "" })}
                   />
                   <Chip
@@ -553,6 +614,7 @@ class LoginPage extends Component {
                     clickable
                     color="secondary"
                     variant="outlined"
+                    sx={{ fontSize: { xs: "0.72rem", sm: "0.78rem" } }}
                     onClick={() => this.setState({ accessKey: "KEY2", error: "", successMsg: "" })}
                   />
                   <Chip
@@ -561,6 +623,7 @@ class LoginPage extends Component {
                     clickable
                     color="info"
                     variant="outlined"
+                    sx={{ fontSize: { xs: "0.72rem", sm: "0.78rem" } }}
                     onClick={() => this.setState({ accessKey: "KEY3", error: "", successMsg: "" })}
                   />
                   <Chip
@@ -569,15 +632,16 @@ class LoginPage extends Component {
                     clickable
                     color="success"
                     variant="outlined"
+                    sx={{ fontSize: { xs: "0.72rem", sm: "0.78rem" } }}
                     onClick={() => this.setState({ accessKey: "KEY4", error: "", successMsg: "" })}
                   />
-                </Stack>
+                </Box>
               </Box>
             </Box>
           )}
 
           {/* TAB 1: EMAIL & PASSWORD SIGN IN */}
-          {activeTab === 1 && (
+          {!showRegister && !showReset && activeTab === 1 && (
             <Box component="form" onSubmit={this.handleSignIn}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: "left" }}>
                 Sign in with your email and password or 6-digit PIN:
@@ -644,12 +708,48 @@ class LoginPage extends Component {
                 {loading ? <CircularProgress size={24} color="inherit" /> : "Sign In with Email"}
               </Button>
 
+              {/* Register Option in Email Sign In Section */}
+              <Box
+                mt={2.5}
+                p={1.5}
+                sx={{
+                  bgcolor: "rgba(2, 132, 199, 0.05)",
+                  borderRadius: 2,
+                  border: "1px solid rgba(2, 132, 199, 0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                  gap: 0.5
+                }}
+              >
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: "0.8rem", sm: "0.85rem" } }}>
+                  New to Family Expense Tracker?
+                </Typography>
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={this.handleOpenRegister}
+                  sx={{
+                    textTransform: "none",
+                    fontWeight: 700,
+                    color: "#0284c7",
+                    fontSize: { xs: "0.8rem", sm: "0.85rem" },
+                    p: 0,
+                    minWidth: 0,
+                    "&:hover": { textDecoration: "underline", bgcolor: "transparent" }
+                  }}
+                >
+                  Create an Account →
+                </Button>
+              </Box>
+
               {/* Quick Fill Test Accounts */}
-              <Box mt={3} p={1.5} sx={{ bgcolor: "#f8fafc", borderRadius: 2, border: "1px dashed #cbd5e1" }}>
+              <Box mt={2.5} p={1.5} sx={{ bgcolor: "#f8fafc", borderRadius: 2, border: "1px dashed #cbd5e1" }}>
                 <Typography variant="caption" color="text.secondary" display="block" mb={1} fontWeight={600}>
                   Quick Fill Test Accounts (Password: family123):
                 </Typography>
-                <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.8, justifyContent: "center" }}>
                   <Chip
                     label="Dad (Admin)"
                     size="small"
@@ -682,14 +782,28 @@ class LoginPage extends Component {
                     variant="outlined"
                     onClick={() => this.handleQuickFill("sister@paul.com", "family123")}
                   />
-                </Stack>
+                </Box>
               </Box>
             </Box>
           )}
 
-          {/* TAB 2: REGISTER */}
-          {activeTab === 2 && (
+          {/* REGISTER VIEW (ACCESSIBLE FROM BOTH TABS) */}
+          {showRegister && (
             <Box component="form" onSubmit={this.handleRegister}>
+              <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+                  Create Personal Account
+                </Typography>
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={this.handleBackToLogin}
+                  sx={{ textTransform: "none", fontSize: "0.82rem", color: "#0284c7", fontWeight: 600 }}
+                >
+                  ← Back to Sign In
+                </Button>
+              </Box>
+
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: "left" }}>
                 Create your individual personal account:
               </Typography>
@@ -781,12 +895,40 @@ class LoginPage extends Component {
               >
                 {loading ? <CircularProgress size={24} color="inherit" /> : "Create Account"}
               </Button>
+
+              <Box mt={2.5} textAlign="center">
+                <Typography variant="body2" color="text.secondary">
+                  Already have an account?{" "}
+                  <Button
+                    variant="text"
+                    size="small"
+                    onClick={this.handleBackToLogin}
+                    sx={{ textTransform: "none", fontWeight: "bold", color: "#0284c7", p: 0, minWidth: 0, verticalAlign: "baseline" }}
+                  >
+                    Sign in here
+                  </Button>
+                </Typography>
+              </Box>
             </Box>
           )}
 
-          {/* TAB 3: FORGOT PASSWORD / RESET OTP (DYNAMIC) */}
-          {activeTab === 3 && (
+          {/* RESET OTP VIEW (ACCESSIBLE FROM FORGOT PASSWORD LINKS) */}
+          {showReset && (
             <Box component="form" onSubmit={!otpSent ? this.handleRequestOtp : this.handleResetPassword}>
+              <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+                  Reset Password with OTP
+                </Typography>
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={this.handleBackToLogin}
+                  sx={{ textTransform: "none", fontSize: "0.82rem", color: "#0284c7", fontWeight: 600 }}
+                >
+                  ← Back to Sign In
+                </Button>
+              </Box>
+
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: "left" }}>
                 {!otpSent
                   ? "Enter your email to receive a 6-digit verification code:"
@@ -870,10 +1012,10 @@ class LoginPage extends Component {
                 <Button
                   variant="text"
                   size="small"
-                  onClick={() => this.setState({ activeTab: 0, showResetTab: false, error: "", successMsg: "" })}
+                  onClick={this.handleBackToLogin}
                   sx={{ textTransform: "none", color: "text.secondary" }}
                 >
-                  ← Back to Access Key Login
+                  ← Back to Sign In
                 </Button>
                 {otpSent && (
                   <Button
@@ -891,7 +1033,18 @@ class LoginPage extends Component {
         </Paper>
 
         {/* POST-AUTH MODAL: JOIN OR CREATE CIRCLE (FOR USERS WITH 0 CIRCLES) */}
-        <Dialog open={showCircleModal} maxWidth="xs" fullWidth>
+        <Dialog
+          open={showCircleModal}
+          maxWidth="xs"
+          fullWidth
+          PaperProps={{
+            sx: {
+              m: { xs: 1.5, sm: 4 },
+              width: { xs: "calc(100% - 24px)", sm: "auto" },
+              borderRadius: 3
+            }
+          }}
+        >
           <DialogTitle sx={{ pb: 1, fontWeight: "bold", textAlign: "center" }}>
             Welcome to Expense Tracker! 🚀
           </DialogTitle>

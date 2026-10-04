@@ -22,7 +22,11 @@ import {
   Alert,
   IconButton,
   Popover,
-  InputAdornment
+  InputAdornment,
+  DialogActions,
+  List,
+  ListItem,
+  Avatar
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
@@ -37,10 +41,30 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import ShuffleIcon from "@mui/icons-material/Shuffle";
 import LogoutIcon from "@mui/icons-material/Logout";
 import EditIcon from "@mui/icons-material/Edit";
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import AddIcon from "@mui/icons-material/Add";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import PeopleIcon from "@mui/icons-material/People";
+import ExitToAppIcon from "@mui/icons-material/ExitToApp";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import CloseIcon from "@mui/icons-material/Close";
 import { exportMonthlyStatementPDF, exportExpensesCSV } from "../../utils/exportUtils";
-import { getMyCircles, switchCircle, joinCircle, createCircle, updateEmail, getMyProfile } from "../../services/apiServices";
+import {
+  getMyCircles,
+  switchCircle,
+  joinCircle,
+  createCircle,
+  updateEmail,
+  getMyProfile,
+  getCircleMembers,
+  removeCircleMember,
+  requestLeaveCircle,
+  cancelLeaveCircle,
+  approveLeaveRequest,
+  rejectLeaveRequest
+} from "../../services/apiServices";
 import NotificationBell from "./NotificationBell";
 
 // Funny random character profiles
@@ -109,6 +133,16 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
   const [editEmailLoading, setEditEmailLoading] = useState(false);
   const [editEmailError, setEditEmailError] = useState("");
   const [editEmailSuccess, setEditEmailSuccess] = useState("");
+
+  // Circle Member Management states (Admin & Member Leave Flow)
+  const [manageModalOpen, setManageModalOpen] = useState(false);
+  const [selectedCircle, setSelectedCircle] = useState(null);
+  const [membersList, setMembersList] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersFeedback, setMembersFeedback] = useState({ error: "", success: "" });
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState({ open: false, member: null });
+  const [leaveConfirmDialog, setLeaveConfirmDialog] = useState({ open: false, circle: null });
+  const [actionLoading, setActionLoading] = useState(false);
 
   const baseCharIndex = getDeterministicIndex(user?.email || user?.name || "User");
   const currentCharIndex = (baseCharIndex + funnyCharOffset) % FUNNY_CHARACTERS.length;
@@ -322,11 +356,163 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
     window.location.href = "/";
   };
 
+  // Open Manage Members dialog for an Admin circle
+  const handleOpenManageMembers = async (circle) => {
+    setProfileAnchorEl(null);
+    setSelectedCircle(circle);
+    setManageModalOpen(true);
+    setMembersFeedback({ error: "", success: "" });
+    setMembersLoading(true);
+    try {
+      const res = await getCircleMembers(circle.circle_id);
+      setMembersList(res.data?.members || []);
+    } catch (err) {
+      setMembersFeedback({
+        error: err.response?.data?.message || "Failed to load circle members.",
+        success: ""
+      });
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+  // Direct Admin Action: delete circle member
+  const handleConfirmDeleteMember = async () => {
+    if (!deleteConfirmDialog.member || !selectedCircle) return;
+    setActionLoading(true);
+    try {
+      const res = await removeCircleMember(
+        selectedCircle.circle_id,
+        deleteConfirmDialog.member.member_id
+      );
+      setMembersList((prev) =>
+        prev.filter((m) => m.member_id !== deleteConfirmDialog.member.member_id)
+      );
+      setMembersFeedback({
+        success: res.data?.message || `${deleteConfirmDialog.member.first_name} has been removed.`,
+        error: ""
+      });
+      setDeleteConfirmDialog({ open: false, member: null });
+      if (onSettlementUpdated) onSettlementUpdated();
+    } catch (err) {
+      setMembersFeedback({
+        error: err.response?.data?.message || "Failed to remove member.",
+        success: ""
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Prompt Member to request leave
+  const handlePromptLeaveCircle = (circle) => {
+    setProfileAnchorEl(null);
+    setLeaveConfirmDialog({ open: true, circle });
+  };
+
+  // Confirm request leave circle
+  const handleConfirmLeaveCircle = async () => {
+    if (!leaveConfirmDialog.circle) return;
+    setActionLoading(true);
+    try {
+      const res = await requestLeaveCircle(leaveConfirmDialog.circle.circle_id);
+      if (res.data?.removed) {
+        // Immediate removal (e.g. admin leaving when another admin exists)
+        setMyCircles((prev) =>
+          prev.filter((c) => c.circle_id !== leaveConfirmDialog.circle.circle_id)
+        );
+        window.location.reload();
+      } else {
+        // Pending approval by admin
+        setMyCircles((prev) =>
+          prev.map((c) =>
+            c.circle_id === leaveConfirmDialog.circle.circle_id
+              ? { ...c, leave_request_status: "PENDING" }
+              : c
+          )
+        );
+      }
+      setLeaveConfirmDialog({ open: false, circle: null });
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to submit leave request.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Cancel pending leave request
+  const handleCancelLeave = async (circleId) => {
+    setActionLoading(true);
+    try {
+      await cancelLeaveCircle(circleId);
+      setMyCircles((prev) =>
+        prev.map((c) =>
+          c.circle_id === circleId ? { ...c, leave_request_status: null } : c
+        )
+      );
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to cancel leave request.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Admin approves a member's pending leave request
+  const handleApproveLeaveMember = async (member) => {
+    if (!member.leave_request_id) return;
+    setActionLoading(true);
+    try {
+      const res = await approveLeaveRequest(member.leave_request_id);
+      setMembersList((prev) =>
+        prev.filter((m) => m.member_id !== member.member_id)
+      );
+      setMembersFeedback({
+        success: res.data?.message || `${member.first_name}'s exit approved.`,
+        error: ""
+      });
+      if (onSettlementUpdated) onSettlementUpdated();
+    } catch (err) {
+      setMembersFeedback({
+        error: err.response?.data?.message || "Failed to approve exit.",
+        success: ""
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Admin rejects a member's pending leave request
+  const handleRejectLeaveMember = async (member) => {
+    if (!member.leave_request_id) return;
+    setActionLoading(true);
+    try {
+      await rejectLeaveRequest(member.leave_request_id);
+      setMembersList((prev) =>
+        prev.map((m) =>
+          m.member_id === member.member_id
+            ? { ...m, leave_request_status: null, leave_request_id: null }
+            : m
+        )
+      );
+      setMembersFeedback({
+        success: `Leave request for ${member.first_name} rejected.`,
+        error: ""
+      });
+    } catch (err) {
+      setMembersFeedback({
+        error: err.response?.data?.message || "Failed to reject leave request.",
+        success: ""
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   return (
     <AppBar position="static" sx={{ background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)" }}>
-      <Toolbar>
+      <Toolbar sx={{ px: { xs: 1, sm: 2 }, minHeight: { xs: 56, sm: 64 }, display: "flex", justifyContent: "space-between" }}>
         {/* Left: Circle Name + Switcher Dropdown */}
-        <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1.5 }, minWidth: 0 }}>
           <Box
             onClick={(e) => setCircleAnchorEl(e.currentTarget)}
             sx={{
@@ -334,30 +520,42 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
               alignItems: "center",
               gap: 0.5,
               cursor: "pointer",
-              px: 1,
+              px: { xs: 0.8, sm: 1 },
               py: 0.5,
               borderRadius: 2,
+              minWidth: 0,
               "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
             }}
           >
-            <Typography variant="h6" fontWeight="bold" sx={{ letterSpacing: "-0.5px" }}>
+            <Typography
+              variant="h6"
+              fontWeight="bold"
+              noWrap
+              sx={{
+                letterSpacing: "-0.5px",
+                fontSize: { xs: "0.95rem", sm: "1.2rem" },
+                maxWidth: { xs: 120, sm: 220, md: 340 }
+              }}
+            >
               {user?.circle_name ? `${user.circle_name}` : "Expense Tracker"}
             </Typography>
-            <KeyboardArrowDownIcon fontSize="small" sx={{ opacity: 0.8 }} />
+            <KeyboardArrowDownIcon fontSize="small" sx={{ opacity: 0.8, flexShrink: 0 }} />
           </Box>
 
           {user?.family_code && (
-            <Tooltip title="Your Circle / Family Invite Code (Share with others to join)">
+            <Tooltip title={copiedCode ? "Copied to clipboard!" : "Click to copy Invite Code"}>
               <Chip
                 label={`Code: ${user.family_code}`}
                 size="small"
+                onClick={handleCopyFamilyCode}
                 sx={{
                   backgroundColor: "rgba(56, 189, 248, 0.15)",
                   color: "#38bdf8",
                   fontWeight: "bold",
                   fontSize: "0.72rem",
+                  cursor: "pointer",
                   border: "1px solid rgba(56, 189, 248, 0.3)",
-                  display: { xs: "none", sm: "inline-flex" }
+                  display: { xs: "none", md: "inline-flex" }
                 }}
               />
             </Tooltip>
@@ -370,7 +568,7 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
             onClose={() => setCircleAnchorEl(null)}
             PaperProps={{
               elevation: 6,
-              sx: { borderRadius: 2.5, minWidth: 230, mt: 1, p: 0.5 }
+              sx: { borderRadius: 2.5, minWidth: 230, maxWidth: "calc(100vw - 32px)", mt: 1, p: 0.5 }
             }}
           >
             <Typography variant="caption" sx={{ px: 2, py: 0.5, color: "text.secondary", fontWeight: 700, display: "block" }}>
@@ -445,42 +643,116 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
         </Box>
 
         {/* Right Nav actions */}
-        <Box display="flex" alignItems="center" gap={1}>
-          <Button color="inherit" component={RouterLink} to="/dashboard">
+        <Box display="flex" alignItems="center" gap={{ xs: 0.5, sm: 1 }}>
+          {/* Dashboard: Full text button on Desktop, Icon on Mobile */}
+          <Button
+            color="inherit"
+            component={RouterLink}
+            to="/dashboard"
+            sx={{ display: { xs: "none", md: "inline-flex" }, textTransform: "none", fontWeight: 600 }}
+          >
             Dashboard
           </Button>
+          <Tooltip title="Dashboard">
+            <IconButton
+              color="inherit"
+              component={RouterLink}
+              to="/dashboard"
+              sx={{
+                display: { xs: "inline-flex", md: "none" },
+                p: { xs: 0.8, sm: 1 },
+                borderRadius: 2,
+                "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }
+              }}
+            >
+              <DashboardIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
 
-          <Button color="inherit" component={RouterLink} to="/add-expense">
+          {/* Add Expense: Full button on Desktop, Prominent Icon button on Mobile */}
+          <Button
+            color="inherit"
+            component={RouterLink}
+            to="/add-expense"
+            startIcon={<AddIcon />}
+            sx={{
+              display: { xs: "none", md: "inline-flex" },
+              textTransform: "none",
+              fontWeight: 600,
+              bgcolor: "rgba(56, 189, 248, 0.12)",
+              color: "#38bdf8",
+              border: "1px solid rgba(56, 189, 248, 0.25)",
+              borderRadius: 2,
+              px: 1.5,
+              "&:hover": { bgcolor: "rgba(56, 189, 248, 0.22)" }
+            }}
+          >
             Add Expense
           </Button>
+          <Tooltip title="Add Expense">
+            <IconButton
+              component={RouterLink}
+              to="/add-expense"
+              sx={{
+                display: { xs: "inline-flex", md: "none" },
+                bgcolor: "#38bdf8",
+                color: "#0f172a",
+                p: { xs: 0.8, sm: 0.9 },
+                borderRadius: 2,
+                "&:hover": { bgcolor: "#7dd3fc" }
+              }}
+            >
+              <AddIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
 
-          {/* Export Statement Dropdown Button */}
+          {/* Export Statement Dropdown Button: Full on Desktop/Tablet, Compact Icon on Mobile */}
           {exportData && (
             <>
               <Tooltip title="Download monthly report as PDF or CSV">
-                <Button
-                  color="inherit"
-                  onClick={handleOpenExport}
-                  disabled={isExporting}
-                  endIcon={
-                    isExporting ? (
-                      <CircularProgress size={16} color="inherit" />
-                    ) : (
-                      <KeyboardArrowDownIcon />
-                    )
-                  }
-                  startIcon={<FileDownloadIcon />}
-                  sx={{
-                    backgroundColor: "rgba(255, 255, 255, 0.1)",
-                    borderRadius: 2,
-                    px: 1.5,
-                    "&:hover": {
-                      backgroundColor: "rgba(255, 255, 255, 0.2)"
+                <span>
+                  <Button
+                    color="inherit"
+                    onClick={handleOpenExport}
+                    disabled={isExporting}
+                    endIcon={
+                      isExporting ? (
+                        <CircularProgress size={16} color="inherit" />
+                      ) : (
+                        <KeyboardArrowDownIcon />
+                      )
                     }
-                  }}
-                >
-                  {isExporting ? "Exporting..." : "Export"}
-                </Button>
+                    startIcon={<FileDownloadIcon />}
+                    sx={{
+                      display: { xs: "none", sm: "inline-flex" },
+                      backgroundColor: "rgba(255, 255, 255, 0.1)",
+                      borderRadius: 2,
+                      px: 1.5,
+                      textTransform: "none",
+                      fontWeight: 600,
+                      "&:hover": {
+                        backgroundColor: "rgba(255, 255, 255, 0.2)"
+                      }
+                    }}
+                  >
+                    {isExporting ? "Exporting..." : "Export"}
+                  </Button>
+
+                  <IconButton
+                    color="inherit"
+                    onClick={handleOpenExport}
+                    disabled={isExporting}
+                    sx={{
+                      display: { xs: "inline-flex", sm: "none" },
+                      backgroundColor: "rgba(255, 255, 255, 0.1)",
+                      borderRadius: 2,
+                      p: 0.8,
+                      "&:hover": { backgroundColor: "rgba(255, 255, 255, 0.2)" }
+                    }}
+                  >
+                    {isExporting ? <CircularProgress size={16} color="inherit" /> : <FileDownloadIcon fontSize="small" />}
+                  </IconButton>
+                </span>
               </Tooltip>
 
               <Menu
@@ -489,7 +761,7 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
                 onClose={handleCloseExport}
                 PaperProps={{
                   elevation: 6,
-                  sx: { borderRadius: 2.5, minWidth: 220, mt: 1, p: 0.5 }
+                  sx: { borderRadius: 2.5, minWidth: 220, maxWidth: "calc(100vw - 32px)", mt: 1, p: 0.5 }
                 }}
                 transformOrigin={{ horizontal: "right", vertical: "top" }}
                 anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
@@ -566,8 +838,9 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
                   elevation: 8,
                   sx: {
                     mt: 1.5,
-                    p: 2.5,
-                    width: 300,
+                    p: { xs: 2, sm: 2.5 },
+                    width: { xs: "calc(100vw - 32px)", sm: 330 },
+                    maxWidth: 350,
                     borderRadius: 3.5,
                     border: "1px solid #e2e8f0",
                     boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)"
@@ -636,7 +909,7 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
                           variant="body2"
                           fontWeight={600}
                           noWrap
-                          sx={{ maxWidth: 165, cursor: "pointer", color: "text.primary" }}
+                          sx={{ maxWidth: { xs: 125, sm: 165 }, cursor: "pointer", color: "text.primary" }}
                         >
                           {user?.email || "No email"}
                         </Typography>
@@ -693,36 +966,183 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
 
                 <Divider sx={{ my: 1.5 }} />
 
-                {/* Active Circle Information */}
-                <Box mb={2} p={1.5} sx={{ bgcolor: "#f8fafc", borderRadius: 2, border: "1px solid #e2e8f0" }}>
-                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
+                {/* Enrolled Circles Information */}
+                <Box mb={2}>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
                     <Typography variant="caption" color="text.secondary" fontWeight={700} textTransform="uppercase">
-                      Active Circle
+                      Your Circles
                     </Typography>
                     <Typography variant="caption" color="primary" fontWeight={700}>
-                      {myCircles.length > 1 ? `${myCircles.length} circles` : "1 circle"}
+                      {myCircles.length > 0 ? `${myCircles.length} circle${myCircles.length > 1 ? "s" : ""}` : "1 circle"}
                     </Typography>
                   </Box>
 
-                  <Typography variant="body2" fontWeight="bold" color="text.primary">
-                    {user?.circle_name || "Paul Family"}
-                  </Typography>
+                  <Box sx={{ maxHeight: 220, overflowY: "auto", pr: 0.5, display: "flex", flexDirection: "column", gap: 1 }}>
+                    {(myCircles.length > 0 ? myCircles : (user?.circle_name ? [{
+                      circle_id: user.circle_id || user.circleId,
+                      circle_name: user.circle_name,
+                      family_code: user.family_code,
+                      role: user.role || "MEMBER"
+                    }] : [])).map((c) => {
+                      const isActive = Number(c.circle_id) === Number(user?.circle_id || user?.circleId);
+                      const isAdmin = c.role === "ADMIN";
+                      const isPendingLeave = c.leave_request_status === "PENDING";
 
-                  {user?.family_code && (
-                    <Box display="flex" justifyContent="space-between" alignItems="center" mt={0.8}>
-                      <Typography variant="caption" color="text.secondary">
-                        Invite Code: <strong style={{ color: "#0284c7" }}>{user.family_code}</strong>
-                      </Typography>
-                      <Tooltip title={copiedCode ? "Copied!" : "Copy Code"}>
-                        <IconButton size="small" onClick={handleCopyFamilyCode} sx={{ p: 0.5 }}>
-                          <ContentCopyIcon
-                            fontSize="small"
-                            sx={{ fontSize: "0.85rem", color: copiedCode ? "#10b981" : "inherit" }}
-                          />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  )}
+                      return (
+                        <Box
+                          key={c.circle_id}
+                          sx={{
+                            p: 1.25,
+                            borderRadius: 2,
+                            bgcolor: isActive ? "rgba(56, 189, 248, 0.06)" : "#f8fafc",
+                            border: isActive ? "1px solid rgba(56, 189, 248, 0.4)" : "1px solid #e2e8f0"
+                          }}
+                        >
+                          <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
+                            <Box display="flex" alignItems="center" gap={0.8} minWidth={0}>
+                              <Typography variant="body2" fontWeight="bold" noWrap sx={{ maxWidth: 150 }}>
+                                {c.circle_name}
+                              </Typography>
+                              {isActive && (
+                                <Chip
+                                  label="Active"
+                                  size="small"
+                                  sx={{
+                                    height: 16,
+                                    fontSize: "0.6rem",
+                                    fontWeight: 700,
+                                    bgcolor: "rgba(16, 185, 129, 0.15)",
+                                    color: "#059669"
+                                  }}
+                                />
+                              )}
+                            </Box>
+                            <Chip
+                              label={c.role}
+                              size="small"
+                              sx={{
+                                height: 18,
+                                fontSize: "0.62rem",
+                                fontWeight: "bold",
+                                bgcolor: isAdmin ? "rgba(124, 58, 237, 0.12)" : "rgba(2, 132, 199, 0.12)",
+                                color: isAdmin ? "#7c3aed" : "#0284c7"
+                              }}
+                            />
+                          </Box>
+
+                          <Box display="flex" justifyContent="space-between" alignItems="center" py={0.2}>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.72rem" }}>
+                              Code: <strong style={{ color: "#0284c7" }}>{c.family_code}</strong>
+                            </Typography>
+                            <Tooltip title={copiedCode === c.family_code ? "Copied!" : "Copy Code"}>
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  if (c.family_code) {
+                                    navigator.clipboard.writeText(c.family_code);
+                                    setCopiedCode(c.family_code);
+                                    setTimeout(() => setCopiedCode(false), 2000);
+                                  }
+                                }}
+                                sx={{ p: 0.3 }}
+                              >
+                                <ContentCopyIcon sx={{ fontSize: "0.8rem", color: copiedCode === c.family_code ? "#10b981" : "inherit" }} />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+
+                          {/* Action Row */}
+                          {isAdmin ? (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              fullWidth
+                              startIcon={<PeopleIcon sx={{ fontSize: "0.95rem !important" }} />}
+                              onClick={() => handleOpenManageMembers(c)}
+                              sx={{
+                                mt: 1,
+                                py: 0.4,
+                                textTransform: "none",
+                                fontWeight: 600,
+                                fontSize: "0.74rem",
+                                borderRadius: 1.5,
+                                borderColor: "#7c3aed",
+                                color: "#7c3aed",
+                                bgcolor: "rgba(124, 58, 237, 0.04)",
+                                "&:hover": {
+                                  bgcolor: "rgba(124, 58, 237, 0.1)",
+                                  borderColor: "#6d28d9"
+                                }
+                              }}
+                            >
+                              Manage Members
+                            </Button>
+                          ) : isPendingLeave ? (
+                            <Box
+                              sx={{
+                                mt: 1,
+                                p: 0.6,
+                                px: 1,
+                                borderRadius: 1.5,
+                                bgcolor: "#fef3c7",
+                                border: "1px solid #fde68a",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between"
+                              }}
+                            >
+                              <Box display="flex" alignItems="center" gap={0.5}>
+                                <AccessTimeIcon sx={{ fontSize: "0.85rem", color: "#d97706" }} />
+                                <Typography variant="caption" sx={{ color: "#b45309", fontWeight: 700, fontSize: "0.68rem" }}>
+                                  Exit Pending Approval
+                                </Typography>
+                              </Box>
+                              <Button
+                                size="small"
+                                onClick={() => handleCancelLeave(c.circle_id)}
+                                disabled={actionLoading}
+                                sx={{
+                                  textTransform: "none",
+                                  fontSize: "0.68rem",
+                                  minWidth: 0,
+                                  p: "1px 6px",
+                                  color: "#dc2626",
+                                  fontWeight: 600
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </Box>
+                          ) : (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="error"
+                              fullWidth
+                              startIcon={<ExitToAppIcon sx={{ fontSize: "0.95rem !important" }} />}
+                              onClick={() => handlePromptLeaveCircle(c)}
+                              disabled={actionLoading}
+                              sx={{
+                                mt: 1,
+                                py: 0.35,
+                                textTransform: "none",
+                                fontWeight: 600,
+                                fontSize: "0.72rem",
+                                borderRadius: 1.5,
+                                borderColor: "rgba(239, 68, 68, 0.4)",
+                                "&:hover": {
+                                  borderColor: "#ef4444",
+                                  bgcolor: "rgba(239, 68, 68, 0.05)"
+                                }
+                              }}
+                            >
+                              Leave Circle
+                            </Button>
+                          )}
+                        </Box>
+                      );
+                    })}
+                  </Box>
                 </Box>
 
                 {/* Bottom Footer Actions */}
@@ -749,7 +1169,11 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
             </>
           )}
 
-          <Button color="inherit" onClick={handleLogout}>
+          <Button
+            color="inherit"
+            onClick={handleLogout}
+            sx={{ display: { xs: "none", md: "inline-flex" }, textTransform: "none", fontWeight: 600 }}
+          >
             Logout
           </Button>
         </Box>
@@ -761,6 +1185,13 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
         onClose={() => !editEmailLoading && setShowEditEmailModal(false)}
         maxWidth="xs"
         fullWidth
+        PaperProps={{
+          sx: {
+            m: { xs: 1.5, sm: 3 },
+            width: { xs: "calc(100% - 24px)", sm: "auto" },
+            borderRadius: 3
+          }
+        }}
       >
         <DialogTitle sx={{ pb: 1, fontWeight: "bold", textAlign: "center" }}>
           Update Email Address ✏️
@@ -858,7 +1289,19 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
       </Dialog>
 
       {/* DIALOG FOR JOINING OR CREATING A CIRCLE */}
-      <Dialog open={showCircleModal} onClose={() => setShowCircleModal(false)} maxWidth="xs" fullWidth>
+      <Dialog
+        open={showCircleModal}
+        onClose={() => setShowCircleModal(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            m: { xs: 1.5, sm: 3 },
+            width: { xs: "calc(100% - 24px)", sm: "auto" },
+            borderRadius: 3
+          }
+        }}
+      >
         <DialogTitle sx={{ pb: 1, fontWeight: "bold", textAlign: "center" }}>
           {circleModalTab === 0 ? "Join a Circle" : "Create a New Circle"}
         </DialogTitle>
@@ -929,6 +1372,329 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
             </Box>
           )}
         </DialogContent>
+      </Dialog>
+
+      {/* DIALOG FOR MANAGING CIRCLE MEMBERS (ADMIN VIEW) */}
+      <Dialog
+        open={manageModalOpen}
+        onClose={() => !actionLoading && setManageModalOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            m: { xs: 1.5, sm: 3 },
+            width: { xs: "calc(100% - 24px)", sm: 540 },
+            borderRadius: 3.5,
+            p: { xs: 0.5, sm: 1 }
+          }
+        }}
+      >
+        <DialogTitle sx={{ pb: 1, pt: 2, px: { xs: 2, sm: 3 }, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <Box>
+            <Box display="flex" alignItems="center" gap={1}>
+              <PeopleIcon sx={{ color: "#7c3aed" }} />
+              <Typography variant="h6" fontWeight="bold">
+                {selectedCircle?.circle_name} Members
+              </Typography>
+            </Box>
+            <Typography variant="caption" color="text.secondary">
+              Invite Code: <strong style={{ color: "#0284c7" }}>{selectedCircle?.family_code}</strong> • {membersList.length} {membersList.length === 1 ? "member" : "members"}
+            </Typography>
+          </Box>
+          <IconButton onClick={() => setManageModalOpen(false)} size="small" sx={{ color: "text.secondary" }}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent sx={{ px: { xs: 2, sm: 3 }, pb: 3 }}>
+          {membersFeedback.error && (
+            <Alert
+              severity="error"
+              sx={{ mb: 2 }}
+              onClose={() => setMembersFeedback({ ...membersFeedback, error: "" })}
+            >
+              {membersFeedback.error}
+            </Alert>
+          )}
+          {membersFeedback.success && (
+            <Alert
+              severity="success"
+              sx={{ mb: 2 }}
+              onClose={() => setMembersFeedback({ ...membersFeedback, success: "" })}
+            >
+              {membersFeedback.success}
+            </Alert>
+          )}
+
+          {/* Pending Exit Requests Notification Banner */}
+          {membersList.some((m) => m.leave_request_status === "PENDING") && (
+            <Box sx={{ mb: 2, p: 1.5, bgcolor: "#fffbeb", border: "1px solid #fef3c7", borderRadius: 2 }}>
+              <Typography variant="caption" fontWeight="bold" color="#b45309" display="block" mb={0.8}>
+                ⏳ PENDING EXIT APPROVALS
+              </Typography>
+              {membersList
+                .filter((m) => m.leave_request_status === "PENDING")
+                .map((pendingM) => (
+                  <Box
+                    key={pendingM.member_id}
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    py={0.5}
+                    flexWrap="wrap"
+                    gap={1}
+                  >
+                    <Typography variant="body2" fontWeight={600} color="#78350f">
+                      {pendingM.first_name} ({pendingM.name}) requested to leave
+                    </Typography>
+                    <Box display="flex" gap={1}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="error"
+                        disabled={actionLoading}
+                        onClick={() => handleApproveLeaveMember(pendingM)}
+                        sx={{ textTransform: "none", fontSize: "0.72rem", py: 0.3, px: 1.2, borderRadius: 1.5, fontWeight: "bold" }}
+                      >
+                        Approve Exit
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={actionLoading}
+                        onClick={() => handleRejectLeaveMember(pendingM)}
+                        sx={{ textTransform: "none", fontSize: "0.72rem", py: 0.3, px: 1.2, borderRadius: 1.5 }}
+                      >
+                        Reject
+                      </Button>
+                    </Box>
+                  </Box>
+                ))}
+            </Box>
+          )}
+
+          {membersLoading ? (
+            <Box display="flex" justifyContent="center" py={4}>
+              <CircularProgress size={32} />
+            </Box>
+          ) : membersList.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" textAlign="center" py={3}>
+              No active members found in this circle.
+            </Typography>
+          ) : (
+            <List disablePadding>
+              {membersList.map((member, index) => {
+                const isCurrentUser =
+                  member.is_current_user || Number(member.user_id) === Number(user?.user_id);
+                const isAdmin = member.role === "ADMIN";
+
+                return (
+                  <React.Fragment key={member.member_id}>
+                    {index > 0 && <Divider sx={{ my: 0.8 }} />}
+                    <ListItem
+                      disableGutters
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        py: 1,
+                        px: { xs: 0.5, sm: 1 },
+                        borderRadius: 2,
+                        "&:hover": { bgcolor: "#f8fafc" }
+                      }}
+                    >
+                      {/* Left: Avatar + Names */}
+                      <Box display="flex" alignItems="center" gap={1.5} minWidth={0} sx={{ flex: 1 }}>
+                        <Avatar
+                          sx={{
+                            width: 40,
+                            height: 40,
+                            bgcolor: isAdmin ? "#7c3aed" : "#0284c7",
+                            fontWeight: "bold",
+                            fontSize: "1rem",
+                            boxShadow: "0 2px 5px rgba(0,0,0,0.12)"
+                          }}
+                        >
+                          {member.first_name ? member.first_name[0].toUpperCase() : "M"}
+                        </Avatar>
+                        <Box minWidth={0}>
+                          <Box display="flex" alignItems="center" gap={0.8} flexWrap="wrap">
+                            {/* Prominent First Name as user specified */}
+                            <Typography
+                              variant="subtitle2"
+                              fontWeight="bold"
+                              color="text.primary"
+                              sx={{ fontSize: "0.95rem" }}
+                            >
+                              {member.first_name}
+                            </Typography>
+
+                            <Chip
+                              label={member.role}
+                              size="small"
+                              sx={{
+                                height: 18,
+                                fontSize: "0.62rem",
+                                fontWeight: "bold",
+                                bgcolor: isAdmin ? "rgba(124, 58, 237, 0.12)" : "rgba(2, 132, 199, 0.12)",
+                                color: isAdmin ? "#7c3aed" : "#0284c7"
+                              }}
+                            />
+
+                            {isCurrentUser && (
+                              <Chip
+                                label="You"
+                                size="small"
+                                variant="outlined"
+                                sx={{ height: 18, fontSize: "0.62rem", color: "text.secondary" }}
+                              />
+                            )}
+
+                            {member.leave_request_status === "PENDING" && (
+                              <Chip
+                                label="Exit Requested"
+                                size="small"
+                                sx={{
+                                  height: 18,
+                                  fontSize: "0.62rem",
+                                  fontWeight: 700,
+                                  bgcolor: "#fef3c7",
+                                  color: "#b45309"
+                                }}
+                              />
+                            )}
+                          </Box>
+
+                          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block", mt: 0.2 }}>
+                            {member.name} {member.email ? `• ${member.email}` : ""} • ID #{member.member_id}
+                          </Typography>
+                        </Box>
+                      </Box>
+
+                      {/* Right: Delete button in front of member */}
+                      <Box ml={1} flexShrink={0}>
+                        {isCurrentUser ? (
+                          <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic", pr: 1 }}>
+                            Admin
+                          </Typography>
+                        ) : (
+                          <Tooltip title={`Remove ${member.first_name} from this circle`}>
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              size="small"
+                              startIcon={<DeleteOutlineIcon fontSize="small" />}
+                              onClick={() => setDeleteConfirmDialog({ open: true, member })}
+                              disabled={actionLoading}
+                              sx={{
+                                textTransform: "none",
+                                fontWeight: 600,
+                                fontSize: "0.75rem",
+                                borderRadius: 2,
+                                px: { xs: 1, sm: 1.5 },
+                                borderColor: "rgba(239, 68, 68, 0.4)",
+                                "&:hover": {
+                                  borderColor: "#ef4444",
+                                  bgcolor: "rgba(239, 68, 68, 0.08)"
+                                }
+                              }}
+                            >
+                              Delete
+                            </Button>
+                          </Tooltip>
+                        )}
+                      </Box>
+                    </ListItem>
+                  </React.Fragment>
+                );
+              })}
+            </List>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* DIALOG FOR CONFIRMING MEMBER REMOVAL */}
+      <Dialog
+        open={deleteConfirmDialog.open}
+        onClose={() => !actionLoading && setDeleteConfirmDialog({ open: false, member: null })}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3, p: 1 } }}
+      >
+        <DialogTitle sx={{ fontWeight: "bold", pb: 1, color: "#dc2626" }}>
+          Remove Circle Member?
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.primary" mb={1.5}>
+            Are you sure you want to remove <strong>{deleteConfirmDialog.member?.first_name}</strong> ({deleteConfirmDialog.member?.name}) from <strong>{selectedCircle?.circle_name}</strong>?
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Note: Past expense and settlement history will be retained for accounting balance integrity, but they will no longer have access to this circle.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setDeleteConfirmDialog({ open: false, member: null })}
+            disabled={actionLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleConfirmDeleteMember}
+            disabled={actionLoading}
+            startIcon={actionLoading ? <CircularProgress size={16} color="inherit" /> : <DeleteOutlineIcon />}
+            sx={{ fontWeight: "bold" }}
+          >
+            {actionLoading ? "Removing..." : "Remove Member"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* DIALOG FOR CONFIRMING LEAVE CIRCLE REQUEST */}
+      <Dialog
+        open={leaveConfirmDialog.open}
+        onClose={() => !actionLoading && setLeaveConfirmDialog({ open: false, circle: null })}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3, p: 1 } }}
+      >
+        <DialogTitle sx={{ fontWeight: "bold", pb: 1, color: "#ea580c" }}>
+          Request to Leave Circle?
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.primary" mb={1.5}>
+            Are you sure you want to request to leave <strong>{leaveConfirmDialog.circle?.circle_name}</strong>?
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            A leave request will be sent to the Circle Admin for review. You will be removed from this circle once the Admin approves your request.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setLeaveConfirmDialog({ open: false, circle: null })}
+            disabled={actionLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmLeaveCircle}
+            disabled={actionLoading}
+            startIcon={actionLoading ? <CircularProgress size={16} color="inherit" /> : <ExitToAppIcon />}
+            sx={{
+              fontWeight: "bold",
+              bgcolor: "#ea580c",
+              color: "#fff",
+              "&:hover": { bgcolor: "#c2410c" }
+            }}
+          >
+            {actionLoading ? "Submitting..." : "Send Leave Request"}
+          </Button>
+        </DialogActions>
       </Dialog>
     </AppBar>
   );
