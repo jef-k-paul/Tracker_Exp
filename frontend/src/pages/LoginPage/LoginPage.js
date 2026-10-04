@@ -12,7 +12,6 @@ import {
   InputAdornment,
   IconButton,
   CircularProgress,
-  Chip,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -136,11 +135,6 @@ class LoginPage extends Component {
 
   handleToggleShowNewPassword = () => {
     this.setState((prev) => ({ showNewPassword: !prev.showNewPassword }));
-  };
-
-  // Quick fill helper for testing
-  handleQuickFill = (email, password) => {
-    this.setState({ email, password, error: "", successMsg: "" });
   };
 
   // Process login success
@@ -318,7 +312,7 @@ class LoginPage extends Component {
       });
   };
 
-  // 5. Handle Legacy Access Key Login (KEY1-KEY4)
+  // 5. Handle Personal Access ID Login
   handleLegacyLogin = (e) => {
     if (e) e.preventDefault();
     const { accessKey } = this.state;
@@ -517,7 +511,7 @@ class LoginPage extends Component {
                 variant="outlined"
                 value={accessKey}
                 onChange={this.handleChange("accessKey")}
-                placeholder="e.g. KEY1, JEFF-412"
+                placeholder="e.g. Name001"
                 required
                 InputProps={{
                   startAdornment: (
@@ -591,51 +585,6 @@ class LoginPage extends Component {
                 >
                   Register & Generate One →
                 </Button>
-              </Box>
-
-              {/* Quick Fill Test Accounts */}
-              <Box mt={2.5} p={1.5} sx={{ bgcolor: "#f8fafc", borderRadius: 2, border: "1px dashed #cbd5e1" }}>
-                <Typography variant="caption" color="text.secondary" display="block" mb={1} fontWeight={600}>
-                  Quick Fill Test Access IDs:
-                </Typography>
-                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.6, justifyContent: "center" }}>
-                  <Chip
-                    label="Dad (KEY1)"
-                    size="small"
-                    clickable
-                    color="primary"
-                    variant="outlined"
-                    sx={{ fontSize: { xs: "0.72rem", sm: "0.78rem" } }}
-                    onClick={() => this.setState({ accessKey: "KEY1", error: "", successMsg: "" })}
-                  />
-                  <Chip
-                    label="Mom (KEY2)"
-                    size="small"
-                    clickable
-                    color="secondary"
-                    variant="outlined"
-                    sx={{ fontSize: { xs: "0.72rem", sm: "0.78rem" } }}
-                    onClick={() => this.setState({ accessKey: "KEY2", error: "", successMsg: "" })}
-                  />
-                  <Chip
-                    label="Son (KEY3)"
-                    size="small"
-                    clickable
-                    color="info"
-                    variant="outlined"
-                    sx={{ fontSize: { xs: "0.72rem", sm: "0.78rem" } }}
-                    onClick={() => this.setState({ accessKey: "KEY3", error: "", successMsg: "" })}
-                  />
-                  <Chip
-                    label="Sister (KEY4)"
-                    size="small"
-                    clickable
-                    color="success"
-                    variant="outlined"
-                    sx={{ fontSize: { xs: "0.72rem", sm: "0.78rem" } }}
-                    onClick={() => this.setState({ accessKey: "KEY4", error: "", successMsg: "" })}
-                  />
-                </Box>
               </Box>
             </Box>
           )}
@@ -742,47 +691,6 @@ class LoginPage extends Component {
                 >
                   Create an Account →
                 </Button>
-              </Box>
-
-              {/* Quick Fill Test Accounts */}
-              <Box mt={2.5} p={1.5} sx={{ bgcolor: "#f8fafc", borderRadius: 2, border: "1px dashed #cbd5e1" }}>
-                <Typography variant="caption" color="text.secondary" display="block" mb={1} fontWeight={600}>
-                  Quick Fill Test Accounts (Password: family123):
-                </Typography>
-                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.8, justifyContent: "center" }}>
-                  <Chip
-                    label="Dad (Admin)"
-                    size="small"
-                    clickable
-                    color="primary"
-                    variant="outlined"
-                    onClick={() => this.handleQuickFill("pauljerryk@gmail.com", "family123")}
-                  />
-                  <Chip
-                    label="Mom"
-                    size="small"
-                    clickable
-                    color="secondary"
-                    variant="outlined"
-                    onClick={() => this.handleQuickFill("mom@paul.com", "family123")}
-                  />
-                  <Chip
-                    label="Son"
-                    size="small"
-                    clickable
-                    color="info"
-                    variant="outlined"
-                    onClick={() => this.handleQuickFill("jeffrey.kpaul14@gmail.com", "family123")}
-                  />
-                  <Chip
-                    label="Sister"
-                    size="small"
-                    clickable
-                    color="success"
-                    variant="outlined"
-                    onClick={() => this.handleQuickFill("sister@paul.com", "family123")}
-                  />
-                </Box>
               </Box>
             </Box>
           )}
