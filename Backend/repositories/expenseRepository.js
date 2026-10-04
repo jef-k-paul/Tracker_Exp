@@ -1,101 +1,148 @@
 const db = require("../db/connections");
 
-exports.insertExpense = (data) => {
-return new Promise((resolve, reject) => {
+exports.insertExpense = (data, conn = null) => {
+  const runner = conn || db;
+  return new Promise((resolve, reject) => {
+    if (!data.circleId) {
+      return reject(new Error("circleId is mandatory to insert an expense."));
+    }
+
     const query = `
-    INSERT INTO expenses 
-    (amount, category_id, paid_by, expense_date, description, split_type)
-    VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO expenses 
+      (circle_id, amount, category_id, paid_by, expense_date, description, split_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
 
-    db.query(query,[data.amount,data.categoryId,data.paidBy,data.date,data.description,data.splitType],(err, result) => {
+    runner.query(
+      query,
+      [
+        data.circleId,
+        data.amount,
+        data.categoryId,
+        data.paidBy,
+        data.date,
+        data.description,
+        data.splitType
+      ],
+      (err, result) => {
         if (err) return reject(err);
         resolve(result.insertId);
-    });
-});
+      }
+    );
+  });
 };
 
-exports.insertSplit = ({ expenseId, memberId, shareAmount }) => {
-return new Promise((resolve, reject) => {
+exports.insertSplit = ({ expenseId, memberId, shareAmount }, conn = null) => {
+  const runner = conn || db;
+  return new Promise((resolve, reject) => {
     const query = `
-    INSERT INTO expense_splits (expense_id, member_id, share_amount)
-    VALUES (?, ?, ?)
+      INSERT INTO expense_splits (expense_id, member_id, share_amount)
+      VALUES (?, ?, ?)
     `;
 
-    db.query(query, [expenseId, memberId, shareAmount], (err) => {
-    if (err) return reject(err);
-    resolve();
+    runner.query(query, [expenseId, memberId, shareAmount], (err) => {
+      if (err) return reject(err);
+      resolve();
     });
-});
-}
-
-exports.expenses = (month, year) => {
-    return new Promise((resolve, reject) => {
-
-        const query = `SELECT e.expense_id, e.amount, c.name AS category, m.name AS paid_by, e.paid_by AS paid_by_id, e.expense_date, e.description, e.split_type FROM expenses e JOIN categories c ON e.category_id = c.category_id JOIN members m ON e.paid_by = m.member_id WHERE MONTH(e.expense_date) = ? AND YEAR(e.expense_date) = ? ORDER BY e.expense_date DESC`;
-
-        db.query(query, [month, year], (err, res) => {
-            if(err)
-                return reject(err);
-
-            resolve(res);
-        });
-    });
+  });
 };
 
-exports.getSplitsForMonth = (month, year) => {
-    return new Promise((resolve, reject) => {
-        const query = `SELECT es.expense_id, es.member_id, m.name AS member_name, es.share_amount FROM expense_splits es JOIN members m ON es.member_id = m.member_id JOIN expenses e ON es.expense_id = e.expense_id WHERE MONTH(e.expense_date) = ? AND YEAR(e.expense_date) = ?`;
+exports.expenses = (month, year, circleId) => {
+  return new Promise((resolve, reject) => {
+    if (!circleId) {
+      return reject(new Error("Active circleId is required to view expenses."));
+    }
 
-        db.query(query, [month, year], (err, res) => {
-            if(err) return reject(err);
-            resolve(res);
-        });
+    const query = `
+      SELECT e.expense_id, e.circle_id, e.amount, c.name AS category, m.name AS paid_by, e.paid_by AS paid_by_id, e.expense_date, e.description, e.split_type 
+      FROM expenses e 
+      JOIN categories c ON e.category_id = c.category_id 
+      JOIN members m ON e.paid_by = m.member_id 
+      WHERE MONTH(e.expense_date) = ? AND YEAR(e.expense_date) = ? AND e.circle_id = ?
+      ORDER BY e.expense_date DESC
+    `;
+
+    db.query(query, [month, year, circleId], (err, res) => {
+      if (err) return reject(err);
+      resolve(res);
     });
+  });
 };
 
-exports.findDuplicateExpense = ({ amount, categoryId, date }) => {
-    return new Promise((resolve, reject) => {
-        const query = `
-            SELECT e.expense_id, e.amount, e.expense_date, c.name AS category_name, m.name AS paid_by_name
-            FROM expenses e
-            JOIN categories c ON e.category_id = c.category_id
-            JOIN members m ON e.paid_by = m.member_id
-            WHERE e.amount = ? AND e.category_id = ? AND e.expense_date = ?
-            LIMIT 1
-        `;
+exports.getSplitsForMonth = (month, year, circleId) => {
+  return new Promise((resolve, reject) => {
+    if (!circleId) {
+      return reject(new Error("Active circleId is required to view splits."));
+    }
 
-        db.query(query, [amount, categoryId, date], (err, res) => {
-            if (err) return reject(err);
-            resolve(res[0] || null);
-        });
+    const query = `
+      SELECT es.expense_id, es.member_id, m.name AS member_name, es.share_amount 
+      FROM expense_splits es 
+      JOIN members m ON es.member_id = m.member_id 
+      JOIN expenses e ON es.expense_id = e.expense_id 
+      WHERE MONTH(e.expense_date) = ? AND YEAR(e.expense_date) = ? AND e.circle_id = ?
+    `;
+
+    db.query(query, [month, year, circleId], (err, res) => {
+      if (err) return reject(err);
+      resolve(res);
     });
+  });
 };
 
-exports.getAllTimePaid = (memberId) => {
-    return new Promise((resolve, reject) => {
-        const query = `
-            SELECT COALESCE(SUM(amount), 0) AS all_time_paid
-            FROM expenses
-            WHERE paid_by = ?
-        `;
-        db.query(query, [memberId], (err, res) => {
-            if (err) return reject(err);
-            resolve(Number(res[0]?.all_time_paid || 0));
-        });
+exports.findDuplicateExpense = ({ amount, categoryId, date, circleId }) => {
+  return new Promise((resolve, reject) => {
+    if (!circleId) {
+      return resolve(null);
+    }
+
+    const query = `
+      SELECT e.expense_id, e.amount, e.expense_date, c.name AS category_name, m.name AS paid_by_name
+      FROM expenses e
+      JOIN categories c ON e.category_id = c.category_id
+      JOIN members m ON e.paid_by = m.member_id
+      WHERE e.amount = ? AND e.category_id = ? AND e.expense_date = ? AND e.circle_id = ?
+      LIMIT 1
+    `;
+
+    db.query(query, [amount, categoryId, date, circleId], (err, res) => {
+      if (err) return reject(err);
+      resolve(res[0] || null);
     });
+  });
 };
 
-exports.getAllTimeShare = (memberId) => {
-    return new Promise((resolve, reject) => {
-        const query = `
-            SELECT COALESCE(SUM(share_amount), 0) AS all_time_share
-            FROM expense_splits
-            WHERE member_id = ?
-        `;
-        db.query(query, [memberId], (err, res) => {
-            if (err) return reject(err);
-            resolve(Number(res[0]?.all_time_share || 0));
-        });
+exports.getAllTimePaid = (memberId, circleId) => {
+  return new Promise((resolve, reject) => {
+    if (!circleId) {
+      return reject(new Error("Active circleId is required for getAllTimePaid."));
+    }
+    const query = `
+      SELECT COALESCE(SUM(amount), 0) AS all_time_paid
+      FROM expenses
+      WHERE paid_by = ? AND circle_id = ?
+    `;
+    db.query(query, [memberId, circleId], (err, res) => {
+      if (err) return reject(err);
+      resolve(Number(res[0]?.all_time_paid || 0));
     });
+  });
+};
+
+exports.getAllTimeShare = (memberId, circleId) => {
+  return new Promise((resolve, reject) => {
+    if (!circleId) {
+      return reject(new Error("Active circleId is required for getAllTimeShare."));
+    }
+    const query = `
+      SELECT COALESCE(SUM(es.share_amount), 0) AS all_time_share
+      FROM expense_splits es
+      JOIN expenses e ON es.expense_id = e.expense_id
+      WHERE es.member_id = ? AND e.circle_id = ?
+    `;
+    db.query(query, [memberId, circleId], (err, res) => {
+      if (err) return reject(err);
+      resolve(Number(res[0]?.all_time_share || 0));
+    });
+  });
 };

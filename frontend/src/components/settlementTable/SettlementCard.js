@@ -119,11 +119,11 @@ const SettlementCard = ({
   };
 
   return (
-    <Paper elevation={3} sx={{ p: 3, mb: 4, borderRadius: 3 }}>
+    <Paper elevation={3} sx={{ p: { xs: 1.5, sm: 3 }, mb: { xs: 2.5, sm: 4 }, borderRadius: 3 }}>
       <Box display="flex" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
         <Box display="flex" alignItems="center">
           <HandshakeIcon color="primary" sx={{ mr: 1, fontSize: 28 }} />
-          <Typography variant="h6" fontWeight="bold">
+          <Typography variant="h6" fontWeight="bold" sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}>
             Settlement Recommendations & Handshake
           </Typography>
         </Box>
@@ -294,7 +294,7 @@ const SettlementCard = ({
                     sm: "calc(50% - 10px)",
                     md: "calc((100% - 40px) / 3)"
                   },
-                  minWidth: { xs: "280px", sm: "300px", md: "310px" },
+                  minWidth: { xs: "240px", sm: "280px", md: "310px" },
                   flexShrink: 0,
                   scrollSnapAlign: "start"
                 }}
@@ -316,7 +316,7 @@ const SettlementCard = ({
                     }
                   }}
                 >
-                  <CardContent sx={{ p: 2.5, "&:last-child": { pb: 2.5 } }}>
+                  <CardContent sx={{ p: { xs: 2, sm: 2.5 }, "&:last-child": { pb: { xs: 2, sm: 2.5 } } }}>
                     <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
                       <Chip
                         label={badgeText}

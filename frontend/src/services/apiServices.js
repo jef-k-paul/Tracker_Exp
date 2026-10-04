@@ -43,23 +43,109 @@ api.interceptors.response.use(
 );
 
 
-// login post call and sending accessKey in payload
+// Credentials login (email + password / PIN)
+export const loginWithCredentials = ({ email, password, circleId }) => {
+    return api.post("/auth/login", { email, password, circleId });
+};
+
+// Legacy accessKey login
 export const login = (accessKey) => {
     return api.post("/auth/login", { accessKey });
 };
 
-//Get sumary 
-export const getSummary = (month, year) =>{
-    return api.get(`/summary?month=${month}&year=${year}`);
-
+// Register individual user account (with optional/generated accessKey)
+export const registerUser = ({ email, password, name, accessKey }) => {
+    return api.post("/auth/register", { email, password, name, accessKey });
 };
 
-export const getExpenses = (month, year) => {
-    return api.get(`/expenses?month=${month}&year=${year}`);
+// Generate fresh unique Access ID preview based on first name
+export const generateAccessKey = (name) => {
+    return api.get(`/auth/generate-key?name=${encodeURIComponent(name || "")}`);
 };
 
-export const getSettlements = (month, year) => {
-    return api.get(`/settlements?month=${month}&year=${year}`);
+// Update user email with verification
+export const updateEmail = ({ newEmail, confirmEmail, verificationKey }) => {
+    return api.post("/auth/update-email", { newEmail, confirmEmail, verificationKey });
+};
+
+// Request 6-digit OTP for password reset
+export const forgotPassword = (email) => {
+    return api.post("/auth/forgot-password", { email });
+};
+
+// Reset password with 6-digit OTP
+export const resetPassword = ({ email, otp, newPassword }) => {
+    return api.post("/auth/reset-password", { email, otp, newPassword });
+};
+
+// Join a circle using family / invite code
+export const joinCircle = ({ familyCode, memberName }) => {
+    return api.post("/auth/join-circle", { familyCode, memberName });
+};
+
+// Create a new family / circle
+export const createCircle = ({ circleName, memberName, adminName }) => {
+    return api.post("/auth/create-circle", { circleName, memberName: memberName || adminName });
+};
+
+// Switch active circle
+export const switchCircle = (circleId) => {
+    return api.post("/auth/switch-circle", { circleId });
+};
+
+// Get all circles the current user belongs to
+export const getMyCircles = () => {
+    return api.get("/auth/my-circles");
+};
+
+// Get current user profile fresh from DB
+export const getMyProfile = () => {
+    return api.get("/auth/me");
+};
+
+// Circle Member Management & Leave Flow
+export const getCircleMembers = (circleId) => {
+    return api.get(`/auth/circles/${circleId}/members`);
+};
+
+export const removeCircleMember = (circleId, memberId) => {
+    return api.delete(`/auth/circles/${circleId}/members/${memberId}`);
+};
+
+export const requestLeaveCircle = (circleId) => {
+    return api.post(`/auth/circles/${circleId}/leave`);
+};
+
+export const cancelLeaveCircle = (circleId) => {
+    return api.post(`/auth/circles/${circleId}/cancel-leave`);
+};
+
+export const getPendingLeaveRequests = () => {
+    return api.get("/auth/circles/pending-leaves");
+};
+
+export const approveLeaveRequest = (requestId) => {
+    return api.post(`/auth/circles/leave-requests/${requestId}/approve`);
+};
+
+export const rejectLeaveRequest = (requestId) => {
+    return api.post(`/auth/circles/leave-requests/${requestId}/reject`);
+};
+
+//Get summary 
+export const getSummary = (month, year, circleId = null) => {
+    const url = circleId ? `/summary?month=${month}&year=${year}&circleId=${circleId}` : `/summary?month=${month}&year=${year}`;
+    return api.get(url);
+};
+
+export const getExpenses = (month, year, circleId = null) => {
+    const url = circleId ? `/expenses?month=${month}&year=${year}&circleId=${circleId}` : `/expenses?month=${month}&year=${year}`;
+    return api.get(url);
+};
+
+export const getSettlements = (month, year, circleId = null) => {
+    const url = circleId ? `/settlements?month=${month}&year=${year}&circleId=${circleId}` : `/settlements?month=${month}&year=${year}`;
+    return api.get(url);
 };
 
 export const initiateSettlement = (payload) => {
@@ -82,8 +168,9 @@ export const getPendingSettlementsCount = () => {
     return api.get("/settlements/pending-count");
 };
 
-export const getMembers = () => {
-    return api.get("/members");
+export const getMembers = (circleId = null) => {
+    const url = circleId ? `/members?circleId=${circleId}` : `/members`;
+    return api.get(url);
 };
 
 export const getCategories = () => {
@@ -94,8 +181,12 @@ export const addExpense = (expense) => {
     return api.post("/expenses", expense);
 };
 
-export const checkDuplicateExpense = (amount, categoryId, date) => {
-    return api.get(`/expenses/check-duplicate?amount=${amount}&categoryId=${categoryId}&date=${date}`);
+export const checkDuplicateExpense = (amount, categoryId, date, circleId = null) => {
+    let url = `/expenses/check-duplicate?amount=${amount}&categoryId=${categoryId}&date=${date}`;
+    if (circleId) {
+        url += `&circleId=${circleId}`;
+    }
+    return api.get(url);
 };
 
 export const getAllTimePaid = (memberId) => {

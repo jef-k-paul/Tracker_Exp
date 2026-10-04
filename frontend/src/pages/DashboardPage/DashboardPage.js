@@ -12,7 +12,7 @@ import {
   Divider,
   Paper
 } from "@mui/material";
-import { getSummary, getSettlements, getExpenses } from "../../services/apiServices";
+import { getSummary, getSettlements, getExpenses, getMyProfile } from "../../services/apiServices";
 
 class DashboardPage extends Component {
   constructor(props) {
@@ -43,6 +43,19 @@ class DashboardPage extends Component {
       window.location.href = "/";
       return;
     }
+
+    // Refresh user profile directly from DB to sync any edited email/credentials
+    getMyProfile()
+      .then((res) => {
+        if (res.data?.user) {
+          localStorage.setItem("user", JSON.stringify(res.data.user));
+          if (res.data.token) {
+            localStorage.setItem("token", res.data.token);
+          }
+          this.setState({ user: res.data.user });
+        }
+      })
+      .catch(() => {});
 
     this.fetchDashboardData(this.state.selectedMonth, this.state.selectedYear);
   }
@@ -109,24 +122,52 @@ class DashboardPage extends Component {
           onSettlementUpdated={() => this.fetchDashboardData(selectedMonth, selectedYear)}
         />
 
-        <Container maxWidth="xl" sx={{ mt: 4, mb: 6 }}>
+        <Container maxWidth="xl" sx={{ mt: { xs: 2, sm: 4 }, mb: { xs: 4, sm: 6 }, px: { xs: 1.5, sm: 3 } }}>
           {/* Header Banner */}
           <Paper
             elevation={2}
             sx={{
-              p: 3,
-              mb: 4,
-              borderRadius: 3,
+              p: { xs: 2, sm: 3 },
+              mb: { xs: 2.5, sm: 4 },
+              borderRadius: { xs: 2.5, sm: 3 },
               background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
               color: "#ffffff"
             }}
           >
-            <Typography variant="h4" fontWeight="bold" gutterBottom>
-              Welcome back, {user?.name || "User"} 👋
-            </Typography>
-            <Typography variant="body1" sx={{ opacity: 0.8 }}>
-              Here is your family expense breakdown, settlement balances, and transaction history.
-            </Typography>
+            <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
+              <Box>
+                <Typography
+                  variant="h4"
+                  fontWeight="bold"
+                  sx={{ fontSize: { xs: "1.3rem", sm: "1.75rem", md: "2.125rem" } }}
+                  gutterBottom
+                >
+                  Welcome back, {user?.name || "User"} 👋
+                </Typography>
+                <Typography variant="body1" sx={{ opacity: 0.8, fontSize: { xs: "0.85rem", sm: "1rem" } }}>
+                  Here is your {user?.circle_name ? `${user.circle_name}` : "family"} expense breakdown, settlement balances, and transaction history.
+                </Typography>
+              </Box>
+              {user?.circle_name && (
+                <Box
+                  sx={{
+                    bgcolor: "rgba(255,255,255,0.08)",
+                    px: { xs: 2, sm: 2.5 },
+                    py: { xs: 1, sm: 1.2 },
+                    borderRadius: 2,
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    width: { xs: "100%", sm: "auto" }
+                  }}
+                >
+                  <Typography variant="caption" sx={{ color: "#94a3b8", display: "block", textTransform: "uppercase", letterSpacing: 1, fontWeight: 700 }}>
+                    Circle: {user.circle_name}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: "#38bdf8", fontWeight: "bold" }}>
+                    Family Code: {user.family_code || "N/A"}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
           </Paper>
 
           {error && (
@@ -152,7 +193,7 @@ class DashboardPage extends Component {
                 onYearChange={this.handleYearChange}
               />
 
-              <Divider sx={{ my: 4 }} />
+              <Divider sx={{ my: { xs: 2.5, sm: 4 } }} />
 
               {/* Settlements Component */}
               <SettlementCard
@@ -163,7 +204,7 @@ class DashboardPage extends Component {
                 onSettlementUpdated={() => this.fetchDashboardData(selectedMonth, selectedYear)}
               />
 
-              <Divider sx={{ my: 4 }} />
+              <Divider sx={{ my: { xs: 2.5, sm: 4 } }} />
 
               {/* Recent Expenses Table */}
               <ExpenseTable

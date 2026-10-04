@@ -51,17 +51,17 @@ const ExpenseTable = ({ expenses = [], currentUser, loading = false, exportData 
   };
 
   return (
-    <Paper elevation={3} sx={{ p: 3, borderRadius: 3 }}>
+    <Paper elevation={3} sx={{ p: { xs: 1.5, sm: 3 }, borderRadius: 3 }}>
       <Box display="flex" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1.5}>
         <Box display="flex" alignItems="center">
           <ReceiptLongIcon color="primary" sx={{ mr: 1, fontSize: 28 }} />
-          <Typography variant="h6" fontWeight="bold">
+          <Typography variant="h6" fontWeight="bold" sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}>
             Expense Transactions History
           </Typography>
         </Box>
 
         {exportData && expenses.length > 0 && (
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} sx={{ width: { xs: "100%", sm: "auto" } }}>
             <Button
               size="small"
               variant="outlined"
@@ -75,7 +75,7 @@ const ExpenseTable = ({ expenses = [], currentUser, loading = false, exportData 
                 )
               }
               onClick={handleDownloadCSV}
-              sx={{ borderRadius: 2, textTransform: "none", fontSize: "0.8rem", fontWeight: 600 }}
+              sx={{ flex: { xs: 1, sm: "unset" }, borderRadius: 2, textTransform: "none", fontSize: { xs: "0.75rem", sm: "0.8rem" }, fontWeight: 600 }}
             >
               {exportingType === "csv" ? "Exporting..." : "Export CSV"}
             </Button>
@@ -92,7 +92,7 @@ const ExpenseTable = ({ expenses = [], currentUser, loading = false, exportData 
                 )
               }
               onClick={handleDownloadPDF}
-              sx={{ borderRadius: 2, textTransform: "none", fontSize: "0.8rem", fontWeight: 600 }}
+              sx={{ flex: { xs: 1, sm: "unset" }, borderRadius: 2, textTransform: "none", fontSize: { xs: "0.75rem", sm: "0.8rem" }, fontWeight: 600 }}
             >
               {exportingType === "pdf" ? "Generating..." : "Statement (PDF)"}
             </Button>
@@ -107,7 +107,7 @@ const ExpenseTable = ({ expenses = [], currentUser, loading = false, exportData 
           </Typography>
         </Box>
       ) : (
-        <TableContainer>
+        <TableContainer sx={{ overflowX: "auto", maxWidth: "100%", WebkitOverflowScrolling: "touch" }}>
           <Table sx={{ minWidth: 650 }}>
             <TableHead>
               <TableRow sx={{ backgroundColor: "#f8fafc" }}>

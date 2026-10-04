@@ -2,27 +2,30 @@ const summaryRepository = require("../repositories/summaryRepository");
 const memberRepository = require("../repositories/memberRepository");
 const settlementRepository = require("../repositories/settlementRepository");
 
-exports.getSummary = async (month, year) => {
+exports.getSummary = async (month, year, circleId) => {
   try {
+    if (!circleId) {
+      throw new Error("Active circle is required to calculate monthly summary.");
+    }
     // 1. Total family expense for the month
-    const totalExpense = await summaryRepository.getTotalExpense(month, year);
+    const totalExpense = await summaryRepository.getTotalExpense(month, year, circleId);
 
     // 2. Paid out of pocket per member
-    const paidData = await summaryRepository.getPaidPerMember(month, year);
+    const paidData = await summaryRepository.getPaidPerMember(month, year, circleId);
 
     // 3. Share per member
-    const shareData = await summaryRepository.getSharePerMember(month, year);
+    const shareData = await summaryRepository.getSharePerMember(month, year, circleId);
 
     // 4. Confirmed two-party handshake settlements for this month
     let confirmedSettlements = [];
     try {
-      const allSettlements = await settlementRepository.getSettlementsForMonth(month, year);
+      const allSettlements = await settlementRepository.getSettlementsForMonth(month, year, circleId);
       confirmedSettlements = (allSettlements || []).filter((s) => s.status === "CONFIRMED");
     } catch (settleErr) {
       console.warn("Settlement lookup warning in getSummary:", settleErr.message);
     }
 
-    const members = await memberRepository.getAllActiveMembers();
+    const members = await memberRepository.getAllActiveMembers(circleId);
     const result = [];
 
     for (let member of members) {
