@@ -1,8 +1,7 @@
 const mysql = require("mysql2");
 require("dotenv").config();
 
-// Create robust connection pool for high concurrency and connection re-use
-const pool = mysql.createPool({
+const dbConfig = {
     host: process.env.DB_HOST || "localhost",
     user: process.env.DB_USER || "root",
     password: process.env.DB_PASSWORD || "Sql@123",
@@ -13,7 +12,14 @@ const pool = mysql.createPool({
     queueLimit: 0,
     enableKeepAlive: true,
     keepAliveInitialDelay: 10000
-});
+};
+
+// Cloud databases (TiDB, Aiven) require SSL encryption
+if (process.env.DB_SSL === "true" || process.env.TIDB_SSL === "true") {
+    dbConfig.ssl = { minVersion: "TLSv1.2", rejectUnauthorized: true };
+}
+
+const pool = mysql.createPool(dbConfig);
 
 // Verify pool connectivity on boot
 pool.getConnection((err, conn) => {
