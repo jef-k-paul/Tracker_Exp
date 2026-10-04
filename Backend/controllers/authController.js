@@ -339,3 +339,119 @@ exports.generateKey = async (req, res) => {
     res.status(500).json({ message: "Failed to generate key" });
   }
 };
+
+// 13. Get circle members (with first names and leave status)
+exports.getCircleMembers = async (req, res) => {
+  try {
+    const { circleId } = req.params;
+    const requestingUserId = req.user.userId;
+    const members = await authService.getCircleMembers(circleId, requestingUserId);
+    res.json({ members });
+  } catch (err) {
+    console.error("Get circle members error:", err.message);
+    res.status(400).json({ message: err.message || "Failed to load circle members." });
+  }
+};
+
+// 14. Admin removes a circle member directly
+exports.removeMember = async (req, res) => {
+  try {
+    const { circleId, memberId } = req.params;
+    const requestingUserId = req.user.userId;
+
+    const result = await authService.removeCircleMember({
+      circleId,
+      memberId,
+      requestingUserId
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("Remove circle member error:", err.message);
+    res.status(400).json({ message: err.message || "Failed to remove member." });
+  }
+};
+
+// 15. Member requests to leave a circle
+exports.requestLeaveCircle = async (req, res) => {
+  try {
+    const { circleId } = req.params;
+    const requestingUserId = req.user.userId;
+
+    const result = await authService.requestLeaveCircle({
+      circleId,
+      requestingUserId
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("Request leave circle error:", err.message);
+    res.status(400).json({ message: err.message || "Failed to submit leave request." });
+  }
+};
+
+// 16. Member cancels pending leave request
+exports.cancelLeaveCircle = async (req, res) => {
+  try {
+    const { circleId } = req.params;
+    const requestingUserId = req.user.userId;
+
+    const result = await authService.cancelLeaveCircle({
+      circleId,
+      requestingUserId
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("Cancel leave circle error:", err.message);
+    res.status(400).json({ message: err.message || "Failed to cancel leave request." });
+  }
+};
+
+// 17. Admin gets pending leave requests across circles
+exports.getPendingLeaveRequests = async (req, res) => {
+  try {
+    const adminUserId = req.user.userId;
+    const requests = await authService.getPendingLeaveRequests(adminUserId);
+    res.json({ requests });
+  } catch (err) {
+    console.error("Get pending leave requests error:", err.message);
+    res.status(500).json({ message: "Failed to retrieve pending leave requests." });
+  }
+};
+
+// 18. Admin approves member leave request
+exports.approveLeaveRequest = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const requestingUserId = req.user.userId;
+
+    const result = await authService.approveLeaveRequest({
+      requestId,
+      requestingUserId
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("Approve leave request error:", err.message);
+    res.status(400).json({ message: err.message || "Failed to approve leave request." });
+  }
+};
+
+// 19. Admin rejects member leave request
+exports.rejectLeaveRequest = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const requestingUserId = req.user.userId;
+
+    const result = await authService.rejectLeaveRequest({
+      requestId,
+      requestingUserId
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("Reject leave request error:", err.message);
+    res.status(400).json({ message: err.message || "Failed to reject leave request." });
+  }
+};

@@ -7,6 +7,9 @@ exports.addExpense = async (data) => {
   const numAmount = Number(amount);
 
   // 1. Validate input parameters
+  if (!circleId) {
+    throw new Error("Active circle is required to add an expense.");
+  }
   if (!amount || isNaN(numAmount) || numAmount <= 0) {
     throw new Error("Expense amount must be a positive number.");
   }
@@ -41,7 +44,7 @@ exports.addExpense = async (data) => {
       amount: numAmount,
       categoryId,
       date,
-      circleId: circleId || null
+      circleId
     });
 
     if (existingDuplicate) {
@@ -54,73 +57,97 @@ exports.addExpense = async (data) => {
     }
   }
 
-  // 4. Use MySQL Transaction for atomic insertion
+  // 4. Use dedicated Connection from Pool for atomic, isolated transaction
   return new Promise((resolve, reject) => {
-    db.beginTransaction(async (transactionErr) => {
-      if (transactionErr) return reject(transactionErr);
+    db.getConnection((connErr, conn) => {
+      if (connErr) return reject(connErr);
 
-      try {
-        // A. Insert parent expense record with circle_id
-        const expenseId = await expenseRepository.insertExpense({
-          circleId: circleId || 1,
-          amount: numAmount,
-          categoryId,
-          paidBy,
-          date,
-          description,
-          splitType
-        });
-
-        // B. Insert child split records for this circle's active members
-        if (splitType === "EQUAL") {
-          const members = await memberRepository.getAllActiveMembers(circleId || null);
-          if (!members || members.length === 0) {
-            throw new Error("No active circle members found for equal split.");
-          }
-          const baseShare = Math.floor((numAmount / members.length) * 100) / 100;
-          let remainderCents = Math.round((numAmount - baseShare * members.length) * 100);
-
-          for (let i = 0; i < members.length; i++) {
-            let memberShare = baseShare;
-            if (remainderCents > 0) {
-              memberShare = Number((memberShare + 0.01).toFixed(2));
-              remainderCents--;
-            }
-            await expenseRepository.insertSplit({
-              expenseId,
-              memberId: members[i].member_id,
-              shareAmount: memberShare
-            });
-          }
-        } else if (splitType === "CUSTOM") {
-          for (let s of splits) {
-            await expenseRepository.insertSplit({
-              expenseId,
-              memberId: s.memberId,
-              shareAmount: Number(s.share)
-            });
-          }
+      conn.beginTransaction(async (transactionErr) => {
+        if (transactionErr) {
+          conn.release();
+          return reject(transactionErr);
         }
 
-        // C. Commit transaction
-        db.commit((commitErr) => {
-          if (commitErr) {
-            return db.rollback(() => reject(commitErr));
+        try {
+          // A. Insert parent expense record with circle_id on this connection
+          const expenseId = await expenseRepository.insertExpense(
+            {
+              circleId,
+              amount: numAmount,
+              categoryId,
+              paidBy,
+              date,
+              description,
+              splitType
+            },
+            conn
+          );
+
+          // B. Insert child split records for this circle's active members
+          if (splitType === "EQUAL") {
+            const members = await memberRepository.getAllActiveMembers(circleId);
+            if (!members || members.length === 0) {
+              throw new Error("No active circle members found for equal split.");
+            }
+            const baseShare = Math.floor((numAmount / members.length) * 100) / 100;
+            let remainderCents = Math.round((numAmount - baseShare * members.length) * 100);
+
+            for (let i = 0; i < members.length; i++) {
+              let memberShare = baseShare;
+              if (remainderCents > 0) {
+                memberShare = Number((memberShare + 0.01).toFixed(2));
+                remainderCents--;
+              }
+              await expenseRepository.insertSplit(
+                {
+                  expenseId,
+                  memberId: members[i].member_id,
+                  shareAmount: memberShare
+                },
+                conn
+              );
+            }
+          } else if (splitType === "CUSTOM") {
+            for (let s of splits) {
+              await expenseRepository.insertSplit(
+                {
+                  expenseId,
+                  memberId: s.memberId,
+                  shareAmount: Number(s.share)
+                },
+                conn
+              );
+            }
           }
-          resolve(expenseId);
-        });
-      } catch (err) {
-        db.rollback(() => {
-          reject(err);
-        });
-      }
+
+          // C. Commit transaction and release connection back to pool
+          conn.commit((commitErr) => {
+            if (commitErr) {
+              return conn.rollback(() => {
+                conn.release();
+                reject(commitErr);
+              });
+            }
+            conn.release();
+            resolve(expenseId);
+          });
+        } catch (err) {
+          conn.rollback(() => {
+            conn.release();
+            reject(err);
+          });
+        }
+      });
     });
   });
 };
 
-exports.expenses = async (month, year, circleId = null) => {
+exports.expenses = async (month, year, circleId) => {
+  if (!circleId) {
+    throw new Error("Active circle is required to view expenses.");
+  }
   const expenseList = await expenseRepository.expenses(month, year, circleId);
-  const allSplits = await expenseRepository.getSplitsForMonth(month, year);
+  const allSplits = await expenseRepository.getSplitsForMonth(month, year, circleId);
 
   return expenseList.map((exp) => {
     const expSplits = allSplits.filter((s) => s.expense_id === exp.expense_id);
@@ -131,15 +158,21 @@ exports.expenses = async (month, year, circleId = null) => {
   });
 };
 
-exports.checkDuplicate = async (amount, categoryId, date, circleId = null) => {
-  if (!amount || !categoryId || !date) return null;
+exports.checkDuplicate = async (amount, categoryId, date, circleId) => {
+  if (!amount || !categoryId || !date || !circleId) return null;
   return await expenseRepository.findDuplicateExpense({ amount, categoryId, date, circleId });
 };
 
-exports.getAllTimePaid = async (memberId) => {
-  return await expenseRepository.getAllTimePaid(memberId);
+exports.getAllTimePaid = async (memberId, circleId) => {
+  if (!circleId) {
+    throw new Error("Active circle is required to fetch all-time paid total.");
+  }
+  return await expenseRepository.getAllTimePaid(memberId, circleId);
 };
 
-exports.getAllTimeShare = async (memberId) => {
-  return await expenseRepository.getAllTimeShare(memberId);
+exports.getAllTimeShare = async (memberId, circleId) => {
+  if (!circleId) {
+    throw new Error("Active circle is required to fetch all-time share total.");
+  }
+  return await expenseRepository.getAllTimeShare(memberId, circleId);
 };

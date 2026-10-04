@@ -19,4 +19,13 @@ router.post("/switch-circle", authenticateToken, authController.switchCircle);
 router.get("/my-circles", authenticateToken, authController.getMyCircles);
 router.get("/me", authenticateToken, authController.getMe);
 
+// Circle Member Management & Leave Flow
+router.get("/circles/:circleId/members", authenticateToken, authController.getCircleMembers);
+router.delete("/circles/:circleId/members/:memberId", authenticateToken, authController.removeMember);
+router.post("/circles/:circleId/leave", authenticateToken, authController.requestLeaveCircle);
+router.post("/circles/:circleId/cancel-leave", authenticateToken, authController.cancelLeaveCircle);
+router.get("/circles/pending-leaves", authenticateToken, authController.getPendingLeaveRequests);
+router.post("/circles/leave-requests/:requestId/approve", authenticateToken, authController.approveLeaveRequest);
+router.post("/circles/leave-requests/:requestId/reject", authenticateToken, authController.rejectLeaveRequest);
+
 module.exports = router;

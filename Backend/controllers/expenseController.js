@@ -1,4 +1,5 @@
 const expenseService = require("../services/expenseService");
+const memberRepository = require("../repositories/memberRepository");
 
 exports.addExpense = async (req, res) => {
     try {
@@ -26,7 +27,10 @@ exports.addExpense = async (req, res) => {
 exports.expenses = async (req, res) => {
     try {
         const { month, year } = req.query;
-        const circleId = req.user?.circleId || null;
+        const circleId = req.user?.circleId;
+        if (!circleId) {
+            return res.status(400).json({ message: "You must belong to an active circle to view expenses." });
+        }
         const result = await expenseService.expenses(month, year, circleId);
         res.json(result);
     } catch(err) {
@@ -38,7 +42,10 @@ exports.expenses = async (req, res) => {
 exports.checkDuplicate = async (req, res) => {
     try {
         const { amount, categoryId, date } = req.query;
-        const circleId = req.user?.circleId || null;
+        const circleId = req.user?.circleId;
+        if (!circleId) {
+            return res.status(400).json({ message: "Active circle is required to check duplicates." });
+        }
         const duplicate = await expenseService.checkDuplicate(amount, categoryId, date, circleId);
         res.json({ isDuplicate: !!duplicate, duplicateInfo: duplicate || null });
     } catch (err) {
@@ -49,11 +56,22 @@ exports.checkDuplicate = async (req, res) => {
 
 exports.getAllTimePaid = async (req, res) => {
     try {
+        const circleId = req.user?.circleId;
+        if (!circleId) {
+            return res.status(400).json({ message: "You must belong to an active circle." });
+        }
         const memberId = req.query.memberId || req.user?.memberId;
         if (!memberId) {
             return res.status(400).json({ message: "Member ID is required." });
         }
-        const total = await expenseService.getAllTimePaid(memberId);
+
+        // Verify member belongs to the active circle to prevent IDOR / cross-circle inspection
+        const member = await memberRepository.getMemberInCircle(memberId, circleId);
+        if (!member) {
+            return res.status(403).json({ message: "Access denied. Member does not belong to your active circle." });
+        }
+
+        const total = await expenseService.getAllTimePaid(memberId, circleId);
         res.json({ memberId: Number(memberId), allTimeTotal: total });
     } catch (err) {
         console.error("Error fetching all-time paid total:", err);
@@ -63,11 +81,22 @@ exports.getAllTimePaid = async (req, res) => {
 
 exports.getAllTimeShare = async (req, res) => {
     try {
+        const circleId = req.user?.circleId;
+        if (!circleId) {
+            return res.status(400).json({ message: "You must belong to an active circle." });
+        }
         const memberId = req.query.memberId || req.user?.memberId;
         if (!memberId) {
             return res.status(400).json({ message: "Member ID is required." });
         }
-        const share = await expenseService.getAllTimeShare(memberId);
+
+        // Verify member belongs to the active circle to prevent IDOR / cross-circle inspection
+        const member = await memberRepository.getMemberInCircle(memberId, circleId);
+        if (!member) {
+            return res.status(403).json({ message: "Access denied. Member does not belong to your active circle." });
+        }
+
+        const share = await expenseService.getAllTimeShare(memberId, circleId);
         res.json({ memberId: Number(memberId), allTimeShare: share });
     } catch (err) {
         console.error("Error fetching all-time share total:", err);

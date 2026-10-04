@@ -2,8 +2,11 @@ const summaryRepository = require("../repositories/summaryRepository");
 const memberRepository = require("../repositories/memberRepository");
 const settlementRepository = require("../repositories/settlementRepository");
 
-exports.getSummary = async (month, year, circleId = null) => {
+exports.getSummary = async (month, year, circleId) => {
   try {
+    if (!circleId) {
+      throw new Error("Active circle is required to calculate monthly summary.");
+    }
     // 1. Total family expense for the month
     const totalExpense = await summaryRepository.getTotalExpense(month, year, circleId);
 

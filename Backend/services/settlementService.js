@@ -2,8 +2,11 @@ const summaryService = require("./summaryService");
 const settlementRepository = require("../repositories/settlementRepository");
 const memberRepository = require("../repositories/memberRepository");
 
-exports.calculateSettlements = async (month, year, circleId = null) => {
+exports.calculateSettlements = async (month, year, circleId) => {
   try {
+    if (!circleId) {
+      throw new Error("Active circle is required to calculate settlements.");
+    }
     const summary = await summaryService.getSummary(month, year, circleId);
     const existingSettlements = await settlementRepository.getSettlementsForMonth(month, year, circleId);
 
@@ -95,7 +98,10 @@ exports.calculateSettlements = async (month, year, circleId = null) => {
   }
 };
 
-exports.initiateSettlement = async ({ payerId, receiverId, amount, month, year, notes, circleId = 1 }) => {
+exports.initiateSettlement = async ({ payerId, receiverId, amount, month, year, notes, circleId }) => {
+  if (!circleId) {
+    throw new Error("Active circle is required to initiate settlement.");
+  }
   const numAmount = Number(amount);
   if (!numAmount || numAmount <= 0) {
     throw new Error("Settlement amount must be a positive number.");
@@ -121,7 +127,7 @@ exports.initiateSettlement = async ({ payerId, receiverId, amount, month, year, 
   }
 
   const settlementId = await settlementRepository.createSettlement({
-    circleId: Number(circleId) || 1,
+    circleId: Number(circleId),
     payerId: Number(payerId),
     receiverId: Number(receiverId),
     amount: numAmount,
@@ -133,14 +139,18 @@ exports.initiateSettlement = async ({ payerId, receiverId, amount, month, year, 
   return await settlementRepository.getSettlementById(settlementId);
 };
 
-exports.confirmSettlement = async (settlementId, receiverId) => {
+exports.confirmSettlement = async (settlementId, receiverId, userId = null) => {
   const settlement = await settlementRepository.getSettlementById(settlementId);
   if (!settlement) {
     throw new Error("Settlement transaction not found.");
   }
 
-  // Security check: Only the designated receiver can confirm the payment
-  if (Number(settlement.receiver_id) !== Number(receiverId)) {
+  // Security check: Only designated receiver (or authenticated user matching receiver_user_id) can confirm payment
+  const isAuthorized =
+    Number(settlement.receiver_id) === Number(receiverId) ||
+    (userId && Number(settlement.receiver_user_id) === Number(userId));
+
+  if (!isAuthorized) {
     throw new Error("Unauthorized: Only the payment recipient can confirm receipt.");
   }
 
@@ -152,13 +162,18 @@ exports.confirmSettlement = async (settlementId, receiverId) => {
   return await settlementRepository.getSettlementById(settlementId);
 };
 
-exports.rejectSettlement = async (settlementId, receiverId) => {
+exports.rejectSettlement = async (settlementId, receiverId, userId = null) => {
   const settlement = await settlementRepository.getSettlementById(settlementId);
   if (!settlement) {
     throw new Error("Settlement transaction not found.");
   }
 
-  if (Number(settlement.receiver_id) !== Number(receiverId)) {
+  // Security check: Only designated receiver (or authenticated user matching receiver_user_id) can reject payment
+  const isAuthorized =
+    Number(settlement.receiver_id) === Number(receiverId) ||
+    (userId && Number(settlement.receiver_user_id) === Number(userId));
+
+  if (!isAuthorized) {
     throw new Error("Unauthorized: Only the payment recipient can reject receipt.");
   }
 
@@ -170,10 +185,10 @@ exports.rejectSettlement = async (settlementId, receiverId) => {
   return await settlementRepository.getSettlementById(settlementId);
 };
 
-exports.getPendingSettlements = async (receiverId) => {
-  return await settlementRepository.getPendingSettlementsForReceiver(receiverId);
+exports.getPendingSettlements = async (receiverId, userId = null) => {
+  return await settlementRepository.getPendingSettlementsForReceiver(receiverId, userId);
 };
 
-exports.getPendingCount = async (receiverId) => {
-  return await settlementRepository.getPendingCount(receiverId);
+exports.getPendingCount = async (receiverId, userId = null) => {
+  return await settlementRepository.getPendingCount(receiverId, userId);
 };

@@ -6,7 +6,10 @@ exports.getSettlements = async (req, res) => {
     if (!month || !year) {
       return res.status(400).json({ message: "Month and Year query parameters are required." });
     }
-    const circleId = req.user?.circleId || null;
+    const circleId = req.user?.circleId;
+    if (!circleId) {
+      return res.status(400).json({ message: "You must belong to an active circle to view settlements." });
+    }
     const result = await settlementService.calculateSettlements(Number(month), Number(year), circleId);
     res.json(result);
   } catch (err) {
@@ -49,12 +52,13 @@ exports.confirmSettlement = async (req, res) => {
   try {
     const settlementId = req.params.id;
     const receiverId = req.user?.memberId;
+    const userId = req.user?.userId;
 
-    if (!receiverId) {
+    if (!receiverId && !userId) {
       return res.status(401).json({ message: "Authentication required." });
     }
 
-    const result = await settlementService.confirmSettlement(settlementId, receiverId);
+    const result = await settlementService.confirmSettlement(settlementId, receiverId, userId);
     res.json({
       message: "Settlement confirmed successfully. Balances have been settled.",
       settlement: result
@@ -69,12 +73,13 @@ exports.rejectSettlement = async (req, res) => {
   try {
     const settlementId = req.params.id;
     const receiverId = req.user?.memberId;
+    const userId = req.user?.userId;
 
-    if (!receiverId) {
+    if (!receiverId && !userId) {
       return res.status(401).json({ message: "Authentication required." });
     }
 
-    const result = await settlementService.rejectSettlement(settlementId, receiverId);
+    const result = await settlementService.rejectSettlement(settlementId, receiverId, userId);
     res.json({
       message: "Settlement marked as not received.",
       settlement: result
@@ -88,11 +93,12 @@ exports.rejectSettlement = async (req, res) => {
 exports.getPendingSettlements = async (req, res) => {
   try {
     const receiverId = req.user?.memberId;
-    if (!receiverId) {
+    const userId = req.user?.userId;
+    if (!receiverId && !userId) {
       return res.status(401).json({ message: "Authentication required." });
     }
 
-    const result = await settlementService.getPendingSettlements(receiverId);
+    const result = await settlementService.getPendingSettlements(receiverId, userId);
     res.json(result);
   } catch (err) {
     console.error("Error fetching pending settlements:", err);
@@ -103,11 +109,12 @@ exports.getPendingSettlements = async (req, res) => {
 exports.getPendingCount = async (req, res) => {
   try {
     const receiverId = req.user?.memberId;
-    if (!receiverId) {
+    const userId = req.user?.userId;
+    if (!receiverId && !userId) {
       return res.status(401).json({ message: "Authentication required." });
     }
 
-    const count = await settlementService.getPendingCount(receiverId);
+    const count = await settlementService.getPendingCount(receiverId, userId);
     res.json({ pendingCount: count });
   } catch (err) {
     console.error("Error fetching pending count:", err);

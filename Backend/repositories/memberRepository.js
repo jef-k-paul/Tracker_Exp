@@ -17,40 +17,61 @@ exports.findById = (accessKey) => {
     });
 };
 
-exports.getAllActiveMembers = (circleId = null) => {
+exports.getAllActiveMembers = (circleId) => {
     return new Promise((resolve, reject) => {
-        let query = `SELECT member_id, name, role, circle_id FROM members WHERE is_active = TRUE`;
-        const params = [];
-        if (circleId) {
-            query += ` AND circle_id = ?`;
-            params.push(circleId);
+        if (!circleId) {
+            return reject(new Error("Active circleId is required to list circle members."));
         }
 
-        db.query(query, params, (err, results) => {
+        const query = `SELECT member_id, name, role, circle_id FROM members WHERE is_active = TRUE AND circle_id = ?`;
+
+        db.query(query, [circleId], (err, results) => {
             if (err) return reject(err);
             resolve(results);
         });
     });
 };
 
-exports.getMembers = (circleId = null) => {
+exports.getMembers = (circleId) => {
     return new Promise((resolve, reject) => {
-        let query = `SELECT member_id, name, role, circle_id FROM members WHERE is_active = TRUE`;
-        const params = [];
-        if (circleId) {
-            query += ` AND circle_id = ?`;
-            params.push(circleId);
+        if (!circleId) {
+            return reject(new Error("Active circleId is required to retrieve members."));
         }
 
-        db.query(query, params, (err, results) => {
+        const query = `SELECT member_id, name, role, circle_id FROM members WHERE is_active = TRUE AND circle_id = ?`;
+
+        db.query(query, [circleId], (err, results) => {
             if(err) return reject(err);
             resolve(results);
         });
     });
 };
 
-exports.createMember = ({ name, role = "MEMBER", accessKey, circleId = 1 }) => {
+exports.getMemberInCircle = (memberId, circleId) => {
     return new Promise((resolve, reject) => {
+        if (!memberId || !circleId) {
+            return resolve(null);
+        }
+
+        const query = `
+          SELECT member_id, name, role, circle_id, user_id, is_active 
+          FROM members 
+          WHERE member_id = ? AND circle_id = ? AND is_active = 1
+        `;
+
+        db.query(query, [memberId, circleId], (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows[0] || null);
+        });
+    });
+};
+
+exports.createMember = ({ name, role = "MEMBER", accessKey, circleId }) => {
+    return new Promise((resolve, reject) => {
+        if (!circleId) {
+            return reject(new Error("circleId is required to create a member."));
+        }
+
         const query = `
           INSERT INTO members (name, role, access_key, circle_id, is_active)
           VALUES (?, ?, ?, ?, 1)

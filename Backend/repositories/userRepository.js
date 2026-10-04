@@ -94,9 +94,15 @@ exports.getUserCircles = (userId) => {
         c.family_code,
         m.member_id,
         m.role,
-        m.name AS member_name
+        m.name AS member_name,
+        clr.request_id AS leave_request_id,
+        clr.status AS leave_request_status
       FROM members m
       JOIN circles c ON m.circle_id = c.circle_id
+      LEFT JOIN circle_leave_requests clr 
+        ON clr.member_id = m.member_id 
+        AND clr.circle_id = c.circle_id 
+        AND clr.status = 'PENDING'
       WHERE m.user_id = ? AND m.is_active = 1
       ORDER BY c.circle_id ASC
     `;
@@ -129,8 +135,14 @@ exports.updateEmail = (userId, newEmail) => {
 
 exports.checkAccessKey = (userId, accessKey) => {
   return new Promise((resolve, reject) => {
-    const query = `SELECT member_id FROM members WHERE user_id = ? AND access_key = ?`;
-    db.query(query, [userId, accessKey?.trim()], (err, rows) => {
+    const cleanKey = accessKey?.trim()?.toUpperCase();
+    const query = `
+      SELECT user_id FROM users WHERE user_id = ? AND UPPER(access_key) = ?
+      UNION
+      SELECT user_id FROM members WHERE user_id = ? AND UPPER(access_key) = ?
+      LIMIT 1
+    `;
+    db.query(query, [userId, cleanKey, userId, cleanKey], (err, rows) => {
       if (err) return reject(err);
       resolve(rows && rows.length > 0);
     });

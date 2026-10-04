@@ -364,3 +364,179 @@ exports.updateEmail = async ({ userId, newEmail, confirmEmail, verificationKey }
   const updatedUser = await userRepository.findById(userId);
   return updatedUser;
 };
+
+// 10. Get members of a circle with first names and pending leave requests
+exports.getCircleMembers = async (circleId, requestingUserId) => {
+  const membership = await circleRepository.findMembership(circleId, requestingUserId);
+  if (!membership) {
+    throw new Error("You are not an active member of this circle.");
+  }
+
+  const rawMembers = await circleRepository.getCircleMembersWithLeaveStatus(circleId);
+  return rawMembers.map((m) => {
+    const trimmed = m.name?.trim() || "Member";
+    const firstName = trimmed.split(/\s+/)[0] || trimmed;
+    return {
+      ...m,
+      first_name: firstName,
+      is_current_user: m.user_id === requestingUserId
+    };
+  });
+};
+
+// 11. Remove a member from a circle (Direct Admin Action)
+exports.removeCircleMember = async ({ circleId, memberId, requestingUserId }) => {
+  const adminMembership = await circleRepository.findMembership(circleId, requestingUserId);
+  if (!adminMembership || adminMembership.role !== "ADMIN") {
+    throw new Error("Unauthorized: Only an Admin of this circle can remove members.");
+  }
+
+  const targetMember = await circleRepository.findMemberById(memberId);
+  if (!targetMember || targetMember.circle_id !== Number(circleId) || !targetMember.is_active) {
+    throw new Error("Member not found or already inactive in this circle.");
+  }
+
+  // Prevent admin from removing themselves if they are the sole admin with other members
+  if (targetMember.user_id === requestingUserId) {
+    const adminCount = await circleRepository.getActiveAdminCount(circleId);
+    const allMembers = await circleRepository.getCircleMembers(circleId);
+    if (adminCount <= 1 && allMembers.length > 1) {
+      throw new Error("You are the only Admin in this circle. Please promote another member to Admin before leaving.");
+    }
+  }
+
+  await circleRepository.removeMemberFromCircle(circleId, memberId);
+
+  // If a pending leave request existed for this member, mark it APPROVED
+  const pendingReq = await circleRepository.getPendingLeaveRequest(circleId, memberId);
+  if (pendingReq) {
+    await circleRepository.updateLeaveRequestStatus(pendingReq.request_id, "APPROVED");
+  }
+
+  const trimmed = targetMember.name?.trim() || "Member";
+  const firstName = trimmed.split(/\s+/)[0] || trimmed;
+
+  const remainingMembers = await circleRepository.getCircleMembersWithLeaveStatus(circleId);
+  return {
+    message: `${firstName} has been removed from ${targetMember.circle_name || "the circle"}.`,
+    members: remainingMembers.map((m) => ({
+      ...m,
+      first_name: m.name?.trim()?.split(/\s+/)[0] || m.name,
+      is_current_user: m.user_id === requestingUserId
+    }))
+  };
+};
+
+// 12. Member requests to leave circle (Requires Admin Approval)
+exports.requestLeaveCircle = async ({ circleId, requestingUserId }) => {
+  const membership = await circleRepository.findMembership(circleId, requestingUserId);
+  if (!membership) {
+    throw new Error("You are not an active member of this circle.");
+  }
+
+  // If user is ADMIN
+  if (membership.role === "ADMIN") {
+    const adminCount = await circleRepository.getActiveAdminCount(circleId);
+    const allMembers = await circleRepository.getCircleMembers(circleId);
+
+    if (adminCount <= 1 && allMembers.length > 1) {
+      throw new Error("You are the only Admin of this circle. Please promote another member to Admin or remove members before leaving.");
+    }
+
+    // If sole member or another admin exists, admin can leave immediately
+    await circleRepository.removeMemberFromCircle(circleId, membership.member_id);
+    return {
+      message: "You have left the circle.",
+      pending: false,
+      removed: true
+    };
+  }
+
+  // If user is regular MEMBER: check for existing pending request
+  const existingReq = await circleRepository.getPendingLeaveRequest(circleId, membership.member_id);
+  if (existingReq) {
+    return {
+      message: "Leave request is already pending Admin approval.",
+      pending: true,
+      requestId: existingReq.request_id
+    };
+  }
+
+  const requestId = await circleRepository.createLeaveRequest({
+    circleId,
+    memberId: membership.member_id,
+    userId: requestingUserId
+  });
+
+  return {
+    message: "Leave request submitted. The Circle Admin has been notified for approval.",
+    pending: true,
+    requestId
+  };
+};
+
+// 13. Cancel pending leave request by member
+exports.cancelLeaveCircle = async ({ circleId, requestingUserId }) => {
+  await circleRepository.cancelLeaveRequest(circleId, requestingUserId);
+  return {
+    message: "Leave request has been cancelled."
+  };
+};
+
+// 14. Get pending leave requests for Admin (notifications)
+exports.getPendingLeaveRequests = async (adminUserId) => {
+  const requests = await circleRepository.getPendingLeaveRequestsForAdmin(adminUserId);
+  return requests.map((r) => {
+    const trimmed = r.member_name?.trim() || "Member";
+    const firstName = trimmed.split(/\s+/)[0] || trimmed;
+    return {
+      ...r,
+      first_name: firstName
+    };
+  });
+};
+
+// 15. Admin approves member leave request
+exports.approveLeaveRequest = async ({ requestId, requestingUserId }) => {
+  const req = await circleRepository.getLeaveRequestById(requestId);
+  if (!req || req.status !== "PENDING") {
+    throw new Error("Leave request not found or has already been processed.");
+  }
+
+  const adminMembership = await circleRepository.findMembership(req.circle_id, requestingUserId);
+  if (!adminMembership || adminMembership.role !== "ADMIN") {
+    throw new Error("Unauthorized: Only an Admin of this circle can approve leave requests.");
+  }
+
+  await circleRepository.removeMemberFromCircle(req.circle_id, req.member_id);
+  await circleRepository.updateLeaveRequestStatus(requestId, "APPROVED");
+
+  const trimmed = req.member_name?.trim() || "Member";
+  const firstName = trimmed.split(/\s+/)[0] || trimmed;
+
+  return {
+    message: `Leave request approved. ${firstName} has been removed from ${req.circle_name}.`
+  };
+};
+
+// 16. Admin rejects member leave request
+exports.rejectLeaveRequest = async ({ requestId, requestingUserId }) => {
+  const req = await circleRepository.getLeaveRequestById(requestId);
+  if (!req || req.status !== "PENDING") {
+    throw new Error("Leave request not found or has already been processed.");
+  }
+
+  const adminMembership = await circleRepository.findMembership(req.circle_id, requestingUserId);
+  if (!adminMembership || adminMembership.role !== "ADMIN") {
+    throw new Error("Unauthorized: Only an Admin of this circle can reject leave requests.");
+  }
+
+  await circleRepository.updateLeaveRequestStatus(requestId, "REJECTED");
+
+  const trimmed = req.member_name?.trim() || "Member";
+  const firstName = trimmed.split(/\s+/)[0] || trimmed;
+
+  return {
+    message: `Leave request rejected for ${firstName}.`
+  };
+};
