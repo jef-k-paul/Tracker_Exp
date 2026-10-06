@@ -115,7 +115,9 @@ exports.loginWithCredentials = async ({ email, password, circleId }) => {
     user: {
       userId: user.user_id,
       email: user.email,
-      name: user.name
+      name: user.name,
+      avatarIndex: user.avatar_index !== undefined ? user.avatar_index : null,
+      avatar_index: user.avatar_index !== undefined ? user.avatar_index : null
     },
     circles,
     activeCircle
@@ -305,7 +307,9 @@ exports.loginWithKey = async (accessKey) => {
       circle_id: activeCircle?.circle_id || null,
       email: user.email,
       circle_name: activeCircle?.circle_name || null,
-      family_code: activeCircle?.family_code || null
+      family_code: activeCircle?.family_code || null,
+      avatarIndex: user.avatar_index !== undefined ? user.avatar_index : null,
+      avatar_index: user.avatar_index !== undefined ? user.avatar_index : null
     };
   }
 

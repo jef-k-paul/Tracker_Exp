@@ -12,7 +12,7 @@ exports.findByEmail = (email) => {
 
 exports.findById = (userId) => {
   return new Promise((resolve, reject) => {
-    const query = `SELECT user_id, email, name, access_key, created_at FROM users WHERE user_id = ?`;
+    const query = `SELECT user_id, email, name, access_key, avatar_index, created_at FROM users WHERE user_id = ?`;
     db.query(query, [userId], (err, rows) => {
       if (err) return reject(err);
       resolve(rows[0] || null);
@@ -145,6 +145,16 @@ exports.checkAccessKey = (userId, accessKey) => {
     db.query(query, [userId, cleanKey, userId, cleanKey], (err, rows) => {
       if (err) return reject(err);
       resolve(rows && rows.length > 0);
+    });
+  });
+};
+
+exports.updateAvatar = (userId, avatarIndex) => {
+  return new Promise((resolve, reject) => {
+    const query = `UPDATE users SET avatar_index = ? WHERE user_id = ?`;
+    db.query(query, [avatarIndex, userId], (err, result) => {
+      if (err) return reject(err);
+      resolve(result);
     });
   });
 };

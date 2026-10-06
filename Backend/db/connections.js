@@ -57,6 +57,14 @@ pool.getConnection((err, conn) => {
     } else {
         console.log("Connected to MySQL via Connection Pool (10 max connections)");
         conn.release();
+
+        // Safely ensure avatar_index column exists on users table
+        pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_index INT DEFAULT NULL", (alterErr) => {
+            if (alterErr) {
+                // Fallback for older MySQL engines without 'IF NOT EXISTS' in ALTER TABLE
+                pool.query("ALTER TABLE users ADD COLUMN avatar_index INT DEFAULT NULL", () => {});
+            }
+        });
     }
 });
 

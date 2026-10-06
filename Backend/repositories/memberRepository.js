@@ -3,7 +3,7 @@ const db = require('../db/connections');
 exports.findById = (accessKey) => {
     return new Promise((resolve, reject) => {
         const query = `
-          SELECT m.member_id, m.user_id, m.name, m.role, m.access_key, m.circle_id, u.email, c.name AS circle_name, c.family_code
+          SELECT m.member_id, m.user_id, m.name, m.role, m.access_key, m.circle_id, u.email, u.avatar_index, c.name AS circle_name, c.family_code
           FROM members m
           LEFT JOIN circles c ON m.circle_id = c.circle_id
           LEFT JOIN users u ON m.user_id = u.user_id
