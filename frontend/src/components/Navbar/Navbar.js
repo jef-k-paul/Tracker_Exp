@@ -57,6 +57,7 @@ import {
   joinCircle,
   createCircle,
   updateEmail,
+  updateAvatar,
   getMyProfile,
   getCircleMembers,
   removeCircleMember,
@@ -91,6 +92,24 @@ const getDeterministicIndex = (identifier) => {
   return Math.abs(hash) % FUNNY_CHARACTERS.length;
 };
 
+// Compute initial or saved avatar index from user object or localStorage
+const getInitialAvatarIndex = (userObj) => {
+  if (userObj?.avatarIndex !== undefined && userObj?.avatarIndex !== null) {
+    return Number(userObj.avatarIndex) % FUNNY_CHARACTERS.length;
+  }
+  if (userObj?.avatar_index !== undefined && userObj?.avatar_index !== null) {
+    return Number(userObj.avatar_index) % FUNNY_CHARACTERS.length;
+  }
+  const userKey = userObj?.userId || userObj?.user_id || userObj?.access_key || userObj?.email;
+  if (userKey) {
+    const saved = localStorage.getItem(`user_avatar_${userKey}`);
+    if (saved !== null && !isNaN(parseInt(saved, 10))) {
+      return parseInt(saved, 10) % FUNNY_CHARACTERS.length;
+    }
+  }
+  return getDeterministicIndex(userObj?.email || userObj?.name || "User");
+};
+
 const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -122,7 +141,7 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
   const [profileAnchorEl, setProfileAnchorEl] = useState(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedAccessKey, setCopiedAccessKey] = useState(false);
-  const [funnyCharOffset, setFunnyCharOffset] = useState(0);
+  const [currentCharIndex, setCurrentCharIndex] = useState(() => getInitialAvatarIndex(initialUser));
 
   // Edit Email Modal states
   const [showEditEmailModal, setShowEditEmailModal] = useState(false);
@@ -144,9 +163,7 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
   const [leaveConfirmDialog, setLeaveConfirmDialog] = useState({ open: false, circle: null });
   const [actionLoading, setActionLoading] = useState(false);
 
-  const baseCharIndex = getDeterministicIndex(user?.email || user?.name || "User");
-  const currentCharIndex = (baseCharIndex + funnyCharOffset) % FUNNY_CHARACTERS.length;
-  const currentChar = FUNNY_CHARACTERS[currentCharIndex];
+  const currentChar = FUNNY_CHARACTERS[currentCharIndex] || FUNNY_CHARACTERS[0];
 
   const handleOpenProfile = (event) => {
     setProfileAnchorEl(event.currentTarget);
@@ -156,8 +173,35 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
     setProfileAnchorEl(null);
   };
 
-  const handleShuffleChar = () => {
-    setFunnyCharOffset((prev) => prev + 1);
+  const handleShuffleChar = async () => {
+    const nextIndex = (currentCharIndex + 1) % FUNNY_CHARACTERS.length;
+    setCurrentCharIndex(nextIndex);
+
+    // 1. Update in-memory user state
+    const updatedUser = {
+      ...(user || {}),
+      avatarIndex: nextIndex,
+      avatar_index: nextIndex
+    };
+    setUser(updatedUser);
+
+    // 2. Persist locally to survive reloads & logins on this client
+    try {
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      const userKey = user?.userId || user?.user_id || user?.access_key || user?.email;
+      if (userKey) {
+        localStorage.setItem(`user_avatar_${userKey}`, nextIndex.toString());
+      }
+    } catch (e) {
+      console.error("Failed to save avatar locally:", e);
+    }
+
+    // 3. Persist to database in background
+    try {
+      await updateAvatar(nextIndex);
+    } catch (err) {
+      console.log("Avatar saved locally, backend sync note:", err?.message);
+    }
   };
 
   const handleCopyFamilyCode = () => {
@@ -237,6 +281,7 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
   useEffect(() => {
     if (currentUser) {
       setUser(currentUser);
+      setCurrentCharIndex(getInitialAvatarIndex(currentUser));
     }
   }, [currentUser]);
 
@@ -252,6 +297,10 @@ const Navbar = ({ exportData, currentUser, onSettlementUpdated }) => {
               localStorage.setItem("token", res.data.token);
             }
             setUser(res.data.user);
+            if (res.data.user.avatarIndex != null || res.data.user.avatar_index != null) {
+              const serverIdx = Number(res.data.user.avatarIndex ?? res.data.user.avatar_index) % FUNNY_CHARACTERS.length;
+              setCurrentCharIndex(serverIdx);
+            }
           }
           if (res.data?.circles) {
             setMyCircles(res.data.circles);

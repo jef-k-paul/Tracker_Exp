@@ -4,10 +4,13 @@ const userRepository = require("../repositories/userRepository");
 const { JWT_SECRET } = require("../middlewares/authMiddleware");
 
 const buildUserPayload = (user, activeCircle) => {
+  const avatarIdx = user.avatarIndex !== undefined ? user.avatarIndex : (user.avatar_index !== undefined ? user.avatar_index : null);
   return {
     userId: user.userId || user.user_id,
     email: user.email,
     name: activeCircle?.member_name || user.name,
+    avatarIndex: avatarIdx,
+    avatar_index: avatarIdx,
     accessKey: user.accessKey || user.access_key || activeCircle?.access_key || null,
     access_key: user.accessKey || user.access_key || activeCircle?.access_key || null,
     memberId: activeCircle?.member_id || null,
@@ -219,10 +222,13 @@ exports.loginWithKey = async (req, res) => {
       return res.status(400).json({ message: "No email address found for this account. Email registration is mandatory." });
     }
 
+    const avatarIdx = member.avatarIndex !== undefined ? member.avatarIndex : (member.avatar_index !== undefined ? member.avatar_index : null);
     const payload = {
       userId: member.user_id || member.member_id,
       email: member.email,
       name: member.name,
+      avatarIndex: avatarIdx,
+      avatar_index: avatarIdx,
       memberId: member.member_id,
       member_id: member.member_id,
       role: member.role,
@@ -326,6 +332,34 @@ exports.getMe = async (req, res) => {
   } catch (err) {
     console.error("Get me error:", err);
     res.status(500).json({ message: "Failed to retrieve user profile." });
+  }
+};
+
+// 11b. Update User Avatar Selection
+exports.updateAvatar = async (req, res) => {
+  try {
+    const userId = req.user?.userId || req.user?.user_id;
+    const { avatarIndex } = req.body;
+    if (avatarIndex === undefined || avatarIndex === null) {
+      return res.status(400).json({ message: "avatarIndex is required." });
+    }
+
+    const cleanIndex = parseInt(avatarIndex, 10);
+    if (isNaN(cleanIndex) || cleanIndex < 0) {
+      return res.status(400).json({ message: "Invalid avatarIndex." });
+    }
+
+    if (userId) {
+      await userRepository.updateAvatar(userId, cleanIndex);
+    }
+
+    res.status(200).json({
+      message: "Avatar updated successfully.",
+      avatarIndex: cleanIndex
+    });
+  } catch (err) {
+    console.error("Update avatar error:", err);
+    res.status(500).json({ message: "Failed to update avatar." });
   }
 };
 

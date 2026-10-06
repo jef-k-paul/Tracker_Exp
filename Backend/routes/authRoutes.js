@@ -13,6 +13,7 @@ router.post("/reset-password", authController.resetPassword);
 
 // Authenticated Profile & Circle Endpoints
 router.post("/update-email", authenticateToken, authController.updateEmail);
+router.post("/update-avatar", authenticateToken, authController.updateAvatar);
 router.post("/join-circle", authenticateToken, authController.joinCircle);
 router.post("/create-circle", authenticateToken, authController.createCircle);
 router.post("/switch-circle", authenticateToken, authController.switchCircle);

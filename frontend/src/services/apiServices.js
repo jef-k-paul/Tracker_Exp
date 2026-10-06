@@ -68,6 +68,11 @@ export const updateEmail = ({ newEmail, confirmEmail, verificationKey }) => {
     return api.post("/auth/update-email", { newEmail, confirmEmail, verificationKey });
 };
 
+// Persist chosen funny character / avatar selection
+export const updateAvatar = (avatarIndex) => {
+    return api.post("/auth/update-avatar", { avatarIndex });
+};
+
 // Request 6-digit OTP for password reset
 export const forgotPassword = (email) => {
     return api.post("/auth/forgot-password", { email });
