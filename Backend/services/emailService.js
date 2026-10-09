@@ -24,19 +24,53 @@ const getOtpHtml = (otp) => {
 };
 
 /**
+ * Auto-detect Brevo API Key even if the user named the variable "Key", "Value", "BREVO", etc. in Render.
+ */
+const getBrevoApiKey = () => {
+  if (process.env.BREVO_API_KEY && process.env.BREVO_API_KEY.trim()) {
+    return process.env.BREVO_API_KEY.trim();
+  }
+  // Auto-detect any environment variable starting with Brevo's signature "xkeysib-"
+  for (const [k, v] of Object.entries(process.env)) {
+    if (typeof v === "string" && v.trim().startsWith("xkeysib-")) {
+      console.log(`[EMAIL NOTICE] Auto-detected Brevo API key from env variable "${k}".`);
+      return v.trim();
+    }
+  }
+  return "";
+};
+
+/**
+ * Resolves verified sender email for Brevo / SMTP.
+ */
+const getSenderEmail = () => {
+  const user = process.env.EMAIL_USER ? process.env.EMAIL_USER.trim().replace(/^["']|["']$/g, "") : "";
+  if (user && user.includes("@")) return user;
+
+  // Search if user stored an email in another env var
+  for (const [k, v] of Object.entries(process.env)) {
+    if (typeof v === "string" && v.includes("@") && !k.toLowerCase().includes("host") && !k.toLowerCase().includes("database") && !k.toLowerCase().includes("url")) {
+      const candidate = v.trim().replace(/^["']|["']$/g, "");
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return "jeffrey.kpaul14@gmail.com";
+};
+
+/**
  * 1. METHOD 1: Brevo REST API (Over HTTPS Port 443)
  * Ideal for cloud free tiers (like Render Free) where outbound SMTP ports 465/587 are blocked.
  * Free tier: 300 emails/day, no credit card required.
  */
 const sendViaBrevo = async (toEmail, otp) => {
-  const apiKey = process.env.BREVO_API_KEY ? process.env.BREVO_API_KEY.trim() : "";
+  const apiKey = getBrevoApiKey();
   if (!apiKey) return null;
 
-  const senderEmail = process.env.EMAIL_USER 
-    ? process.env.EMAIL_USER.trim().replace(/^["']|["']$/g, "") 
-    : (process.env.BREVO_SENDER || "noreply@familyexpensetracker.com");
+  const senderEmail = getSenderEmail();
 
-  console.log(`[EMAIL] Sending OTP via Brevo HTTPS API (Port 443) to ${toEmail}...`);
+  console.log(`[EMAIL] Sending OTP via Brevo HTTPS API (Port 443) from ${senderEmail} to ${toEmail}...`);
 
   const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -194,6 +228,13 @@ const sendViaSmtp = async (toEmail, otp) => {
  * Main dispatcher: Tries HTTPS APIs first (Port 443 - never blocked), then SMTP, then fallback simulation.
  */
 exports.sendPasswordResetOtp = async (toEmail, otp) => {
+  const brevoKey = getBrevoApiKey();
+  if (brevoKey) {
+    console.log(`[EMAIL] Brevo API Key found (${brevoKey.substring(0, 10)}...). Dispatching via HTTPS Port 443.`);
+  } else {
+    console.warn(`[EMAIL NOTICE] No Brevo API key found in environment variables. Checking fallback delivery methods.`);
+  }
+
   // 1. Try Brevo HTTPS API (Recommended for Render free tier)
   try {
     const sent = await sendViaBrevo(toEmail, otp);
