@@ -146,11 +146,8 @@ exports.requestPasswordReset = async (email) => {
   const emailRes = await emailService.sendPasswordResetOtp(cleanEmail, otp);
 
   // NEVER return OTP in the API response — it must only arrive via email
-  // In dev mode (SMTP not configured), the OTP is logged to the server console only
   return {
-    message: emailRes.simulated
-      ? "A 6-digit reset code has been generated. Check the server terminal/logs for the OTP code (Gmail SMTP is not configured — set EMAIL_USER & EMAIL_PASS in environment variables to enable real email delivery)."
-      : "A 6-digit reset code has been sent to your email inbox. Please check your inbox (and spam folder)."
+    message: "A 6-digit OTP code has been sent to your email. Please check your inbox."
   };
 };
 
