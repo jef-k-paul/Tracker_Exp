@@ -1,19 +1,31 @@
 const nodemailer = require("nodemailer");
-const dns = require("dns");
-
-// Force Node.js to prioritize IPv4 DNS resolution.
-// This prevents ENETUNREACH errors on cloud hosting platforms (like Render) that do not support outgoing IPv6 routes.
-if (dns.setDefaultResultOrder) {
-  dns.setDefaultResultOrder("ipv4first");
-}
+const dns = require("dns").promises;
 
 /**
- * Creates and returns a Nodemailer transporter using Gmail SMTP with forced IPv4.
- * Strips whitespace from EMAIL_PASS (Google displays 16-character App Passwords with spaces: "xxxx xxxx xxxx xxxx").
+ * Resolves smtp.gmail.com explicitly to an IPv4 address.
+ * Nodemailer v10's internal resolver randomly selects between IPv4 and IPv6 addresses,
+ * which causes ENETUNREACH errors on cloud hosts like Render that lack IPv6 network routes.
+ * Passing the resolved IPv4 address directly prevents Nodemailer from ever attempting an IPv6 address.
+ */
+const resolveGmailIpv4 = async () => {
+  try {
+    const addresses = await dns.resolve4("smtp.gmail.com");
+    if (addresses && addresses.length > 0) {
+      return addresses[0];
+    }
+  } catch (err) {
+    console.warn("[EMAIL WARNING] Could not resolve smtp.gmail.com IPv4 ahead of time:", err.message);
+  }
+  return "smtp.gmail.com";
+};
+
+/**
+ * Creates and returns a Nodemailer transporter using direct IPv4 with SNI.
+ * Strips whitespace and quotes from EMAIL_PASS.
  *
  * @param {number} port - 465 (SSL direct) or 587 (STARTTLS)
  */
-const getTransporter = (port = 465) => {
+const getTransporter = async (port = 465) => {
   const user = process.env.EMAIL_USER ? process.env.EMAIL_USER.trim().replace(/^["']|["']$/g, "") : "";
   const rawPass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.trim().replace(/^["']|["']$/g, "") : "";
   
@@ -23,12 +35,12 @@ const getTransporter = (port = 465) => {
 
   // Google displays App Passwords with spaces, e.g. "abcd efgh ijkl mnop". Strip all whitespace and quotes.
   const cleanPass = rawPass.replace(/[\s"']/g, "");
+  const targetHost = await resolveGmailIpv4();
 
   return nodemailer.createTransport({
-    host: "smtp.gmail.com",
+    host: targetHost,
     port: port,
     secure: port === 465, // true for 465, false for 587
-    family: 4, // CRITICAL: Force IPv4 connection to prevent ENETUNREACH on IPv6 addresses
     auth: {
       user: user,
       pass: cleanPass
@@ -37,6 +49,7 @@ const getTransporter = (port = 465) => {
     greetingTimeout: 15000,
     socketTimeout: 20000,
     tls: {
+      servername: "smtp.gmail.com", // Essential for TLS handshake when connecting directly to an IP
       rejectUnauthorized: true,
       minVersion: "TLSv1.2"
     }
@@ -47,14 +60,14 @@ exports.sendPasswordResetOtp = async (toEmail, otp) => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     console.warn("[EMAIL NOTICE] EMAIL_USER or EMAIL_PASS environment variable is missing on this server instance.");
   } else {
-    console.log(`[EMAIL] Attempting to send OTP via Gmail SMTP (IPv4 forced) to ${toEmail}...`);
+    console.log(`[EMAIL] Attempting to send OTP via Gmail SMTP (IPv4 direct) to ${toEmail}...`);
   }
 
-  const primaryTransporter = getTransporter(465);
+  const primaryTransporter = await getTransporter(465);
 
   // If Gmail SMTP credentials are configured, try sending real email
   if (primaryTransporter) {
-    const fromEmail = process.env.EMAIL_USER.trim();
+    const fromEmail = process.env.EMAIL_USER.trim().replace(/^["']|["']$/g, "");
     const mailOptions = {
       from: `"Family Expense Tracker" <${fromEmail}>`,
       to: toEmail.trim(),
@@ -77,17 +90,17 @@ exports.sendPasswordResetOtp = async (toEmail, otp) => {
       `
     };
 
-    // Attempt 1: Port 465 (SSL) with IPv4
+    // Attempt 1: Port 465 (SSL) with direct IPv4
     try {
       await primaryTransporter.sendMail(mailOptions);
       console.log(`[EMAIL] Password reset OTP sent successfully via Port 465 to ${toEmail}`);
       return { success: true, simulated: false };
     } catch (err465) {
-      console.warn(`[EMAIL WARNING] Port 465 failed (${err465.message}). Retrying on Port 587 (STARTTLS with IPv4)...`);
+      console.warn(`[EMAIL WARNING] Port 465 failed (${err465.message}). Retrying on Port 587 (STARTTLS with direct IPv4)...`);
 
-      // Attempt 2: Fallback to Port 587 (STARTTLS) with IPv4
+      // Attempt 2: Fallback to Port 587 (STARTTLS) with direct IPv4
       try {
-        const fallbackTransporter = getTransporter(587);
+        const fallbackTransporter = await getTransporter(587);
         if (fallbackTransporter) {
           await fallbackTransporter.sendMail(mailOptions);
           console.log(`[EMAIL] Password reset OTP sent successfully via Port 587 to ${toEmail}`);
