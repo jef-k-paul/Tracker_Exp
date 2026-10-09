@@ -1,24 +1,45 @@
 const nodemailer = require("nodemailer");
 
-let transporter = null;
+/**
+ * Creates and returns a Nodemailer transporter using Gmail SMTP.
+ * Strips whitespace from EMAIL_PASS (Google displays 16-character App Passwords with spaces: "xxxx xxxx xxxx xxxx").
+ */
+const getTransporter = () => {
+  const user = process.env.EMAIL_USER ? process.env.EMAIL_USER.trim() : "";
+  const rawPass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.trim() : "";
+  
+  if (!user || !rawPass) {
+    return null;
+  }
 
-if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-  transporter = nodemailer.createTransport({
+  // Google displays App Passwords with spaces, e.g. "abcd efgh ijkl mnop". Strip all whitespace.
+  const cleanPass = rawPass.replace(/\s+/g, "");
+
+  return nodemailer.createTransport({
     service: "gmail",
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true, // Port 465 SSL
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
+      user: user,
+      pass: cleanPass
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000
   });
-}
+};
 
 exports.sendPasswordResetOtp = async (toEmail, otp) => {
-  // If Gmail SMTP credentials are configured, try sending real email
+  const transporter = getTransporter();
+
+  // If Gmail SMTP credentials are configured, send real email
   if (transporter) {
     try {
+      const fromEmail = process.env.EMAIL_USER.trim();
       const mailOptions = {
-        from: `"Expense Tracker" <${process.env.EMAIL_USER}>`,
-        to: toEmail,
+        from: `"Expense Tracker" <${fromEmail}>`,
+        to: toEmail.trim(),
         subject: "Your Password Reset OTP - Expense Tracker",
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
@@ -39,15 +60,20 @@ exports.sendPasswordResetOtp = async (toEmail, otp) => {
       };
 
       await transporter.sendMail(mailOptions);
-      console.log(`[EMAIL] Password reset OTP sent to ${toEmail}`);
+      console.log(`[EMAIL] Password reset OTP sent successfully to ${toEmail}`);
       return { success: true, simulated: false };
     } catch (err) {
       console.error("[EMAIL ERROR] Failed to send via Gmail SMTP:", err.message);
-      // Fallback to console simulation so dev/testing doesn't break
+      if (err.message && err.message.includes("535")) {
+        console.error(
+          "[EMAIL ERROR TIP] Gmail authentication failed (535). Ensure 2-Step Verification is turned ON on your Google account and you generated a 16-character 'App Password' from https://myaccount.google.com/apppasswords."
+        );
+      }
+      // If SMTP fails, fall through to simulation so the user is not stuck
     }
   }
 
-  // Fallback simulation for dev/testing when SMTP is not configured
+  // Fallback simulation for dev/testing when SMTP is not configured or fails
   console.log(`
 ======================================================
 [DEV / TESTING MODE] PASSWORD RESET OTP
