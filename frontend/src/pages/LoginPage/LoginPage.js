@@ -261,8 +261,8 @@ class LoginPage extends Component {
       .then((res) => {
         this.setState({
           otpSent: true,
-          otpCode: res.data?.otp || "",
-          successMsg: res.data?.message || "6-digit OTP code sent!",
+          otpCode: "",
+          successMsg: res.data?.message || "A 6-digit OTP code has been sent to your email!",
           loading: false
         });
       })
