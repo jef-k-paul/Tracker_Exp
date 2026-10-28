@@ -74,12 +74,13 @@ exports.rejectSettlement = async (req, res) => {
     const settlementId = req.params.id;
     const receiverId = req.user?.memberId;
     const userId = req.user?.userId;
+    const { reason } = req.body || {};
 
     if (!receiverId && !userId) {
       return res.status(401).json({ message: "Authentication required." });
     }
 
-    const result = await settlementService.rejectSettlement(settlementId, receiverId, userId);
+    const result = await settlementService.rejectSettlement(settlementId, receiverId, userId, reason);
     res.json({
       message: "Settlement marked as not received.",
       settlement: result
@@ -87,6 +88,27 @@ exports.rejectSettlement = async (req, res) => {
   } catch (err) {
     console.error("Error rejecting settlement:", err.message);
     res.status(400).json({ message: err.message || "Failed to reject settlement." });
+  }
+};
+
+exports.cancelSettlement = async (req, res) => {
+  try {
+    const settlementId = req.params.id;
+    const payerId = req.user?.memberId;
+    const userId = req.user?.userId;
+
+    if (!payerId && !userId) {
+      return res.status(401).json({ message: "Authentication required." });
+    }
+
+    const result = await settlementService.cancelSettlement(settlementId, payerId, userId);
+    res.json({
+      message: "Settlement request cancelled successfully.",
+      settlement: result
+    });
+  } catch (err) {
+    console.error("Error cancelling settlement:", err.message);
+    res.status(400).json({ message: err.message || "Failed to cancel settlement." });
   }
 };
 
