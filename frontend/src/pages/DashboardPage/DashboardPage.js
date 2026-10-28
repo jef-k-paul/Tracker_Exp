@@ -198,6 +198,8 @@ class DashboardPage extends Component {
               {/* Settlements Component */}
               <SettlementCard
                 settlements={settlements}
+                expenses={expenses}
+                summary={summary}
                 currentUser={user}
                 selectedMonth={selectedMonth}
                 selectedYear={selectedYear}

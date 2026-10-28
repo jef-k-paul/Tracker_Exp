@@ -109,9 +109,15 @@ const NotificationBell = ({ currentUser, onSettlementUpdated }) => {
   };
 
   const handleReject = async (settlementId) => {
+    const reason = window.prompt(
+      "Optional: Enter reason why payment was not received:",
+      "Payment not credited to bank / UPI account"
+    );
+    if (reason === null) return; // user cancelled
+
     setLoadingId(settlementId);
     try {
-      await rejectSettlement(settlementId);
+      await rejectSettlement(settlementId, reason);
       setPendingList((prev) => prev.filter((s) => s.settlement_id !== settlementId));
       if (onSettlementUpdated) onSettlementUpdated();
     } catch (err) {
