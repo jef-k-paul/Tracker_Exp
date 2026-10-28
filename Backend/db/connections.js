@@ -65,6 +65,13 @@ pool.getConnection((err, conn) => {
                 pool.query("ALTER TABLE users ADD COLUMN avatar_index INT DEFAULT NULL", () => {});
             }
         });
+
+        // Safely ensure rejection_reason column exists on settlements table
+        pool.query("ALTER TABLE settlements ADD COLUMN IF NOT EXISTS rejection_reason VARCHAR(255) DEFAULT NULL", (alterErr) => {
+            if (alterErr) {
+                pool.query("ALTER TABLE settlements ADD COLUMN rejection_reason VARCHAR(255) DEFAULT NULL", () => {});
+            }
+        });
     }
 });
 

@@ -10,24 +10,61 @@ exports.calculateSettlements = async (month, year, circleId) => {
     const summary = await summaryService.getSummary(month, year, circleId);
     const existingSettlements = await settlementRepository.getSettlementsForMonth(month, year, circleId);
 
-    // Map member names to member_ids
+    // Map member names to member_ids and vice versa
     const allMembers = await memberRepository.getAllActiveMembers(circleId);
     const memberMap = {};
+    const memberIdToName = {};
     allMembers.forEach((m) => {
       memberMap[m.name.trim().toLowerCase()] = m.member_id;
+      memberIdToName[m.member_id] = m.name;
     });
 
-    // Balances in summary.perPerson are already neutralized with CONFIRMED settlements
-    const adjustedBalances = {};
+    // 1. Separate existing recorded settlements by status
+    const pendingSettlements = (existingSettlements || []).filter((s) => s.status === "PENDING");
+    const confirmedSettlements = (existingSettlements || []).filter((s) => s.status === "CONFIRMED");
+    const rejectedSettlements = (existingSettlements || []).filter((s) => s.status === "REJECTED");
+
+    // 2. Prepare immutable PENDING cards (actual transfers initiated by payers awaiting verification)
+    const pendingList = pendingSettlements.map((s) => ({
+      from: s.payer_name,
+      to: s.receiver_name,
+      from_id: s.payer_id,
+      to_id: s.receiver_id,
+      amount: Number(s.amount),
+      status: "PENDING",
+      settlement_id: s.settlement_id,
+      created_at: s.created_at,
+      notes: s.notes,
+      is_pending_transfer: true
+    }));
+
+    // 3. Compute remaining unsettled net balances:
+    // Balances in summary.perPerson are already adjusted with CONFIRMED settlements.
+    // For pending in-flight transfers:
+    // - Payer initiated money -> their unsettled debt is reduced by +amount
+    // - Receiver has money in-flight -> their unsettled receivable is reduced by -amount
+    const effectiveBalances = {};
     summary.perPerson.forEach((p) => {
-      adjustedBalances[p.member] = Number(p.balance || 0);
+      const memId = p.member_id;
+      const rawNet = Number(p.balance || 0);
+
+      const pendingOutgoing = pendingSettlements
+        .filter((s) => Number(s.payer_id) === Number(memId))
+        .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+
+      const pendingIncoming = pendingSettlements
+        .filter((s) => Number(s.receiver_id) === Number(memId))
+        .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+
+      const remaining = Number((rawNet + pendingOutgoing - pendingIncoming).toFixed(2));
+      effectiveBalances[p.member] = Math.abs(remaining) < 0.01 ? 0 : remaining;
     });
 
-    // Divide into remaining creditors and debtors
+    // 4. Divide into remaining creditors and debtors for UNINITIATED dues
     const creditors = [];
     const debitors = [];
 
-    Object.entries(adjustedBalances).forEach(([name, bal]) => {
+    Object.entries(effectiveBalances).forEach(([name, bal]) => {
       const rounded = Number(bal.toFixed(2));
       if (rounded > 0.01) {
         creditors.push({ name, amount: rounded });
@@ -36,7 +73,7 @@ exports.calculateSettlements = async (month, year, circleId) => {
       }
     });
 
-    // Run greedy settlement algorithm on remaining balances
+    // 5. Run greedy settlement algorithm strictly on remaining uninitiated balances
     const recommendations = [];
     let i = 0;
     let j = 0;
@@ -44,19 +81,10 @@ exports.calculateSettlements = async (month, year, circleId) => {
     while (i < debitors.length && j < creditors.length) {
       const debtor = debitors[i];
       const creditor = creditors[j];
-
       const amount = Math.min(debtor.amount, creditor.amount);
 
-      // Check if there is already a PENDING settlement between this debtor and creditor
       const debtorId = memberMap[debtor.name.trim().toLowerCase()];
       const creditorId = memberMap[creditor.name.trim().toLowerCase()];
-
-      const pendingMatch = existingSettlements.find(
-        (s) =>
-          s.status === "PENDING" &&
-          s.payer_id === debtorId &&
-          s.receiver_id === creditorId
-      );
 
       recommendations.push({
         from: debtor.name,
@@ -64,9 +92,9 @@ exports.calculateSettlements = async (month, year, circleId) => {
         from_id: debtorId,
         to_id: creditorId,
         amount: Number(amount.toFixed(2)),
-        status: pendingMatch ? "PENDING" : "UNINITIATED",
-        settlement_id: pendingMatch ? pendingMatch.settlement_id : null,
-        created_at: pendingMatch ? pendingMatch.created_at : null
+        status: "UNINITIATED",
+        settlement_id: null,
+        created_at: null
       });
 
       debtor.amount -= amount;
@@ -76,8 +104,7 @@ exports.calculateSettlements = async (month, year, circleId) => {
       if (creditor.amount <= 0.01) j++;
     }
 
-    // Include CONFIRMED settlements so completed handshakes remain visible as acknowledged
-    const confirmedSettlements = (existingSettlements || []).filter((s) => s.status === "CONFIRMED");
+    // 6. Include CONFIRMED settlements so completed handshakes remain visible
     const confirmedList = confirmedSettlements.map((s) => ({
       from: s.payer_name,
       to: s.receiver_name,
@@ -91,7 +118,29 @@ exports.calculateSettlements = async (month, year, circleId) => {
       notes: s.notes
     }));
 
-    return [...recommendations, ...confirmedList];
+    // 7. Include recent REJECTED settlements with reasons for payer audit and feedback
+    const rejectedList = rejectedSettlements.map((s) => {
+      let reason = s.rejection_reason || "";
+      if (!reason && s.notes && s.notes.includes("[REJECTED:")) {
+        const match = s.notes.match(/\[REJECTED:\s*([^\]]+)\]/);
+        if (match) reason = match[1];
+      }
+      return {
+        from: s.payer_name,
+        to: s.receiver_name,
+        from_id: s.payer_id,
+        to_id: s.receiver_id,
+        amount: Number(s.amount),
+        status: "REJECTED",
+        settlement_id: s.settlement_id,
+        created_at: s.created_at,
+        rejected_at: s.confirmed_at || s.created_at,
+        rejection_reason: reason || "Payment not credited to account",
+        notes: s.notes
+      };
+    });
+
+    return [...pendingList, ...recommendations, ...confirmedList, ...rejectedList];
   } catch (err) {
     console.error("Error in calculateSettlements:", err);
     throw err;
@@ -113,17 +162,20 @@ exports.initiateSettlement = async ({ payerId, receiverId, amount, month, year, 
     throw new Error("Payer and receiver cannot be the same member.");
   }
 
-  // Check if a PENDING settlement already exists for this pair
+  // Prevent accidental rapid duplicate submissions (within 30 seconds for same pair and amount)
   const pending = await settlementRepository.getPendingSettlementsForReceiver(receiverId);
-  const existingPending = pending.find(
+  const duplicate = pending.find(
     (p) =>
       Number(p.payer_id) === Number(payerId) &&
       Number(p.month) === Number(month) &&
-      Number(p.year) === Number(year)
+      Number(p.year) === Number(year) &&
+      Math.abs(Number(p.amount) - numAmount) < 0.01 &&
+      p.created_at &&
+      Date.now() - new Date(p.created_at).getTime() < 30000
   );
 
-  if (existingPending) {
-    throw new Error("A settlement request is already pending verification for this member.");
+  if (duplicate) {
+    throw new Error("A duplicate settlement request was just submitted. Please wait.");
   }
 
   const settlementId = await settlementRepository.createSettlement({
@@ -162,7 +214,7 @@ exports.confirmSettlement = async (settlementId, receiverId, userId = null) => {
   return await settlementRepository.getSettlementById(settlementId);
 };
 
-exports.rejectSettlement = async (settlementId, receiverId, userId = null) => {
+exports.rejectSettlement = async (settlementId, receiverId, userId = null, reason = "") => {
   const settlement = await settlementRepository.getSettlementById(settlementId);
   if (!settlement) {
     throw new Error("Settlement transaction not found.");
@@ -181,7 +233,31 @@ exports.rejectSettlement = async (settlementId, receiverId, userId = null) => {
     throw new Error(`Cannot reject settlement that is already ${settlement.status}.`);
   }
 
-  await settlementRepository.updateSettlementStatus(settlementId, "REJECTED", new Date());
+  const cleanReason = reason?.trim() || "Payment not credited to account";
+  await settlementRepository.updateSettlementStatus(settlementId, "REJECTED", new Date(), cleanReason);
+  return await settlementRepository.getSettlementById(settlementId);
+};
+
+exports.cancelSettlement = async (settlementId, payerId, userId = null) => {
+  const settlement = await settlementRepository.getSettlementById(settlementId);
+  if (!settlement) {
+    throw new Error("Settlement transaction not found.");
+  }
+
+  // Security check: Only the payer can cancel their own unconfirmed pending request
+  const isAuthorized =
+    Number(settlement.payer_id) === Number(payerId) ||
+    (userId && Number(settlement.payer_user_id) === Number(userId));
+
+  if (!isAuthorized) {
+    throw new Error("Unauthorized: Only the payment initiator can cancel this pending request.");
+  }
+
+  if (settlement.status !== "PENDING") {
+    throw new Error(`Cannot cancel settlement that is already ${settlement.status}.`);
+  }
+
+  await settlementRepository.cancelSettlement(settlementId);
   return await settlementRepository.getSettlementById(settlementId);
 };
 

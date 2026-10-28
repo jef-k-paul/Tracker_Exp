@@ -4,6 +4,8 @@ const userRepository = require("../repositories/userRepository");
 const circleRepository = require("../repositories/circleRepository");
 const memberRepository = require("../repositories/memberRepository");
 const emailService = require("./emailService");
+const summaryService = require("./summaryService");
+const settlementRepository = require("../repositories/settlementRepository");
 
 // Helper to generate short, crisp, unique Access ID from first name
 const generateAccessKeyFromFirstName = async (fullName) => {
@@ -406,6 +408,41 @@ exports.removeCircleMember = async ({ circleId, memberId, requestingUserId }) =>
     }
   }
 
+  // Verify member has no pending settlements awaiting verification
+  const now = new Date();
+  const currentMonthSettlements = await settlementRepository.getSettlementsForMonth(
+    now.getMonth() + 1,
+    now.getFullYear(),
+    circleId
+  );
+  const hasPending = (currentMonthSettlements || []).some(
+    (s) =>
+      s.status === "PENDING" &&
+      (Number(s.payer_id) === Number(memberId) || Number(s.receiver_id) === Number(memberId))
+  );
+  if (hasPending) {
+    throw new Error(
+      `Cannot remove ${targetMember.name}: Member has an active settlement pending verification. Please confirm, reject, or cancel it first.`
+    );
+  }
+
+  // Verify member has no unsettled circle balance for this month
+  const currentSummary = await summaryService.getSummary(
+    now.getMonth() + 1,
+    now.getFullYear(),
+    circleId
+  );
+  const memberBal = (currentSummary.perPerson || []).find(
+    (p) => Number(p.member_id) === Number(memberId)
+  );
+  if (memberBal && Math.abs(Number(memberBal.balance || 0)) > 0.01) {
+    const bal = Number(memberBal.balance);
+    const text = bal > 0 ? `is owed ₹${bal}` : `owes ₹${Math.abs(bal)}`;
+    throw new Error(
+      `Cannot remove ${targetMember.name}: Member ${text} in circle balance for this month. Please settle all circle dues before leaving.`
+    );
+  }
+
   await circleRepository.removeMemberFromCircle(circleId, memberId);
 
   // If a pending leave request existed for this member, mark it APPROVED
@@ -507,6 +544,41 @@ exports.approveLeaveRequest = async ({ requestId, requestingUserId }) => {
   const adminMembership = await circleRepository.findMembership(req.circle_id, requestingUserId);
   if (!adminMembership || adminMembership.role !== "ADMIN") {
     throw new Error("Unauthorized: Only an Admin of this circle can approve leave requests.");
+  }
+
+  // Verify member has no pending settlements awaiting verification
+  const now = new Date();
+  const currentMonthSettlements = await settlementRepository.getSettlementsForMonth(
+    now.getMonth() + 1,
+    now.getFullYear(),
+    req.circle_id
+  );
+  const hasPending = (currentMonthSettlements || []).some(
+    (s) =>
+      s.status === "PENDING" &&
+      (Number(s.payer_id) === Number(req.member_id) || Number(s.receiver_id) === Number(req.member_id))
+  );
+  if (hasPending) {
+    throw new Error(
+      `Cannot approve leave for ${req.member_name}: Member has an active settlement pending verification. Please confirm, reject, or cancel it first.`
+    );
+  }
+
+  // Verify member has no unsettled circle balance for this month
+  const currentSummary = await summaryService.getSummary(
+    now.getMonth() + 1,
+    now.getFullYear(),
+    req.circle_id
+  );
+  const memberBal = (currentSummary.perPerson || []).find(
+    (p) => Number(p.member_id) === Number(req.member_id)
+  );
+  if (memberBal && Math.abs(Number(memberBal.balance || 0)) > 0.01) {
+    const bal = Number(memberBal.balance);
+    const text = bal > 0 ? `is owed ₹${bal}` : `owes ₹${Math.abs(bal)}`;
+    throw new Error(
+      `Cannot approve leave for ${req.member_name}: Member ${text} in circle balance for this month. Please settle all circle dues before leaving.`
+    );
   }
 
   await circleRepository.removeMemberFromCircle(req.circle_id, req.member_id);

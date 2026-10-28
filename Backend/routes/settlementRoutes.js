@@ -11,6 +11,7 @@ router.get("/pending", settlementController.getPendingSettlements);
 router.post("/initiate", settlementController.initiateSettlement);
 router.put("/:id/confirm", settlementController.confirmSettlement);
 router.put("/:id/reject", settlementController.rejectSettlement);
+router.put("/:id/cancel", settlementController.cancelSettlement);
 router.get("/", settlementController.getSettlements);
 
 module.exports = router;

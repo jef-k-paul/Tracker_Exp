@@ -161,8 +161,12 @@ export const confirmSettlement = (settlementId) => {
     return api.put(`/settlements/${settlementId}/confirm`);
 };
 
-export const rejectSettlement = (settlementId) => {
-    return api.put(`/settlements/${settlementId}/reject`);
+export const rejectSettlement = (settlementId, reason = "") => {
+    return api.put(`/settlements/${settlementId}/reject`, { reason });
+};
+
+export const cancelSettlement = (settlementId) => {
+    return api.put(`/settlements/${settlementId}/cancel`);
 };
 
 export const getPendingSettlements = () => {

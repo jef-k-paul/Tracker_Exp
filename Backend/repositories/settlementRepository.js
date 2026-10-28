@@ -21,6 +21,7 @@ exports.getSettlementById = (settlementId) => {
     const query = `
       SELECT s.*, 
              p.name AS payer_name, 
+             p.user_id AS payer_user_id,
              r.name AS receiver_name,
              r.user_id AS receiver_user_id,
              c.name AS circle_name
@@ -37,14 +38,45 @@ exports.getSettlementById = (settlementId) => {
   });
 };
 
-exports.updateSettlementStatus = (settlementId, status, confirmedAt = null) => {
+exports.updateSettlementStatus = (settlementId, status, confirmedAt = null, rejectionReason = null) => {
+  return new Promise((resolve, reject) => {
+    const hasReason = rejectionReason !== null && rejectionReason !== undefined;
+    const query = hasReason
+      ? `UPDATE settlements SET status = ?, confirmed_at = ?, rejection_reason = ? WHERE settlement_id = ?`
+      : `UPDATE settlements SET status = ?, confirmed_at = ? WHERE settlement_id = ?`;
+    const params = hasReason
+      ? [status, confirmedAt, rejectionReason, settlementId]
+      : [status, confirmedAt, settlementId];
+
+    db.query(query, params, (err, result) => {
+      if (err) {
+        // Fallback for older MySQL where rejection_reason column may not be migrated yet
+        if (hasReason && (err.code === "ER_BAD_FIELD_ERROR" || err.message?.includes("rejection_reason"))) {
+          const fallbackQuery = `
+            UPDATE settlements 
+            SET status = ?, confirmed_at = ?, notes = CONCAT(COALESCE(notes, ''), ' [REJECTED: ', ?, ']')
+            WHERE settlement_id = ?
+          `;
+          return db.query(fallbackQuery, [status, confirmedAt, rejectionReason, settlementId], (fbErr, fbRes) => {
+            if (fbErr) return reject(fbErr);
+            resolve(fbRes.affectedRows > 0);
+          });
+        }
+        return reject(err);
+      }
+      resolve(result.affectedRows > 0);
+    });
+  });
+};
+
+exports.cancelSettlement = (settlementId) => {
   return new Promise((resolve, reject) => {
     const query = `
       UPDATE settlements 
-      SET status = ?, confirmed_at = ?
-      WHERE settlement_id = ?
+      SET status = 'CANCELLED' 
+      WHERE settlement_id = ? AND status = 'PENDING'
     `;
-    db.query(query, [status, confirmedAt, settlementId], (err, result) => {
+    db.query(query, [settlementId], (err, result) => {
       if (err) return reject(err);
       resolve(result.affectedRows > 0);
     });

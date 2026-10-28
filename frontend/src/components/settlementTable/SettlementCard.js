@@ -11,7 +11,13 @@ import {
   Button,
   CircularProgress,
   IconButton,
-  Tooltip
+  Tooltip,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField
 } from "@mui/material";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -23,26 +29,57 @@ import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import CancelScheduleSendIcon from "@mui/icons-material/CancelScheduleSend";
 import {
   initiateSettlement,
   confirmSettlement,
-  rejectSettlement
+  rejectSettlement,
+  cancelSettlement
 } from "../../services/apiServices";
+import SettlementBreakdownModal from "./SettlementBreakdownModal";
+
+const REJECTION_REASONS = [
+  "Payment not credited to bank / UPI account",
+  "Amount received was incorrect",
+  "Sent to wrong account / person",
+  "Duplicate payment claim"
+];
 
 const SettlementCard = ({
   settlements = [],
+  expenses = [],
+  summary = {},
   currentUser,
   selectedMonth = 1,
   selectedYear = new Date().getFullYear(),
   onSettlementUpdated
 }) => {
   const [loadingActionId, setLoadingActionId] = useState(null);
+  const [breakdownItem, setBreakdownItem] = useState(null);
+
+  // Reject Reason Modal State
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectTargetItem, setRejectTargetItem] = useState(null);
+  const [selectedReason, setSelectedReason] = useState(REJECTION_REASONS[0]);
+  const [customReason, setCustomReason] = useState("");
+
+  // Dismissed Rejections for this session
+  const [dismissedRejections, setDismissedRejections] = useState([]);
+
   const scrollContainerRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const loggedInName = currentUser?.name?.toLowerCase();
-  const confirmedCount = settlements.filter((s) => s.status === "CONFIRMED").length;
-  const activeCount = settlements.filter((s) => s.status !== "CONFIRMED").length;
+
+  // Separate rejected alerts from active settlement cards
+  const rejectedSettlements = settlements.filter(
+    (s) => s.status === "REJECTED" && !dismissedRejections.includes(s.settlement_id)
+  );
+  const visibleCards = settlements.filter((s) => s.status !== "REJECTED");
+
+  const confirmedCount = visibleCards.filter((s) => s.status === "CONFIRMED").length;
+  const activeCount = visibleCards.filter((s) => s.status !== "CONFIRMED").length;
 
   const checkScrollState = useCallback(() => {
     const el = scrollContainerRef.current;
@@ -57,7 +94,7 @@ const SettlementCard = ({
     const handleResize = () => checkScrollState();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [settlements, checkScrollState]);
+  }, [visibleCards, checkScrollState]);
 
   const handleScroll = (direction) => {
     const el = scrollContainerRef.current;
@@ -104,10 +141,21 @@ const SettlementCard = ({
     }
   };
 
-  const handleReject = async (settlementId) => {
-    setLoadingActionId(`reject-${settlementId}`);
+  const handleOpenRejectModal = (item) => {
+    setRejectTargetItem(item);
+    setSelectedReason(REJECTION_REASONS[0]);
+    setCustomReason("");
+    setRejectModalOpen(true);
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectTargetItem) return;
+    const finalReason = customReason.trim() || selectedReason;
+    setLoadingActionId(`reject-${rejectTargetItem.settlement_id}`);
+    setRejectModalOpen(false);
+
     try {
-      await rejectSettlement(settlementId);
+      await rejectSettlement(rejectTargetItem.settlement_id, finalReason);
       if (onSettlementUpdated) {
         onSettlementUpdated();
       }
@@ -115,11 +163,62 @@ const SettlementCard = ({
       console.error("Error rejecting settlement:", err);
     } finally {
       setLoadingActionId(null);
+      setRejectTargetItem(null);
     }
+  };
+
+  const handleCancelPending = async (settlementId) => {
+    if (!window.confirm("Are you sure you want to cancel this pending payment request?")) {
+      return;
+    }
+    setLoadingActionId(`cancel-${settlementId}`);
+    try {
+      await cancelSettlement(settlementId);
+      if (onSettlementUpdated) {
+        onSettlementUpdated();
+      }
+    } catch (err) {
+      console.error("Error cancelling settlement:", err);
+    } finally {
+      setLoadingActionId(null);
+    }
+  };
+
+  const handleDismissRejection = (settlementId) => {
+    setDismissedRejections((prev) => [...prev, settlementId]);
   };
 
   return (
     <Paper elevation={3} sx={{ p: { xs: 1.5, sm: 3 }, mb: { xs: 2.5, sm: 4 }, borderRadius: 3 }}>
+      {/* Rejection Alert Banners for Payer or Receiver */}
+      {rejectedSettlements.map((rej, idx) => {
+        const isPayerOfRejection = rej.from.toLowerCase() === loggedInName;
+        const isReceiverOfRejection = rej.to.toLowerCase() === loggedInName;
+        if (!isPayerOfRejection && !isReceiverOfRejection) return null;
+
+        return (
+          <Alert
+            key={idx}
+            severity="warning"
+            sx={{ mb: 2.5, borderRadius: 2 }}
+            action={
+              <Button color="inherit" size="small" onClick={() => handleDismissRejection(rej.settlement_id)}>
+                Dismiss
+              </Button>
+            }
+          >
+            <Typography variant="subtitle2" fontWeight="bold">
+              {isPayerOfRejection
+                ? `Your payment of ₹${rej.amount} to ${rej.to} was marked as Not Received`
+                : `You marked payment of ₹${rej.amount} from ${rej.from} as Not Received`}
+            </Typography>
+            <Typography variant="body2" sx={{ fontSize: "0.85rem", mt: 0.3 }}>
+              Reason: "{rej.rejection_reason || "Payment not credited to account"}". {isPayerOfRejection ? "Please verify your bank / UPI statement and discuss with " + rej.to + "." : ""}
+            </Typography>
+          </Alert>
+        );
+      })}
+
       <Box display="flex" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
         <Box display="flex" alignItems="center">
           <HandshakeIcon color="primary" sx={{ mr: 1, fontSize: 28 }} />
@@ -135,9 +234,9 @@ const SettlementCard = ({
             color="primary"
             sx={{ fontSize: "0.7rem", fontWeight: 600 }}
           />
-          {settlements.length > 0 && (
+          {visibleCards.length > 0 && (
             <Chip
-              label={`${settlements.length} settlement${settlements.length > 1 ? "s" : ""}${
+              label={`${visibleCards.length} settlement${visibleCards.length > 1 ? "s" : ""}${
                 confirmedCount > 0 ? ` (${confirmedCount} settled)` : ""
               }`}
               size="small"
@@ -152,7 +251,7 @@ const SettlementCard = ({
               sx={{ fontSize: "0.7rem", fontWeight: 600 }}
             />
           )}
-          {settlements.length > 0 && (
+          {visibleCards.length > 0 && (
             <Stack direction="row" spacing={0.5} alignItems="center">
               <Tooltip title="Scroll left">
                 <span>
@@ -195,7 +294,7 @@ const SettlementCard = ({
         </Stack>
       </Box>
 
-      {settlements.length === 0 ? (
+      {visibleCards.length === 0 ? (
         <Card
           elevation={0}
           sx={{
@@ -211,7 +310,7 @@ const SettlementCard = ({
             All Settled Up! 🎉
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            No settlements recorded for this month.
+            No pending settlements recorded for this month.
           </Typography>
         </Card>
       ) : (
@@ -239,7 +338,7 @@ const SettlementCard = ({
             }
           }}
         >
-          {settlements.map((item, index) => {
+          {visibleCards.map((item, index) => {
             const isPayer = item.from.toLowerCase() === loggedInName;
             const isReceiver = item.to.toLowerCase() === loggedInName;
             const isPending = item.status === "PENDING";
@@ -384,11 +483,29 @@ const SettlementCard = ({
                       >
                         ₹{Number(item.amount).toLocaleString("en-IN")}
                       </Typography>
+
+                      {/* How Was This Calculated Button */}
+                      <Button
+                        size="small"
+                        variant="text"
+                        startIcon={<HelpOutlineIcon sx={{ fontSize: 14 }} />}
+                        onClick={() => setBreakdownItem(item)}
+                        sx={{
+                          textTransform: "none",
+                          fontSize: "0.72rem",
+                          color: "text.secondary",
+                          py: 0.2,
+                          mt: 0.5,
+                          "&:hover": { color: "primary.main", backgroundColor: "rgba(2, 132, 199, 0.08)" }
+                        }}
+                      >
+                        How was this calculated? 🔍
+                      </Button>
                     </Box>
 
                     {/* TWO-PARTY HANDSHAKE INTERACTIVE ACTIONS OR ACKNOWLEDGEMENT */}
                     <Box
-                      mt={2}
+                      mt={1.5}
                       pt={1.5}
                       borderTop={
                         isConfirmed
@@ -443,8 +560,26 @@ const SettlementCard = ({
                                 label={`Waiting for ${item.to} to confirm`}
                                 size="small"
                                 color="warning"
-                                sx={{ fontWeight: 600, fontSize: "0.72rem" }}
+                                sx={{ fontWeight: 600, fontSize: "0.72rem", mb: 1 }}
                               />
+                              <Button
+                                fullWidth
+                                variant="outlined"
+                                color="inherit"
+                                size="small"
+                                startIcon={<CancelScheduleSendIcon sx={{ fontSize: 15 }} />}
+                                disabled={loadingActionId !== null}
+                                onClick={() => handleCancelPending(item.settlement_id)}
+                                sx={{
+                                  textTransform: "none",
+                                  fontSize: "0.72rem",
+                                  color: "text.secondary",
+                                  borderColor: "#cbd5e1",
+                                  borderRadius: 2
+                                }}
+                              >
+                                Cancel Payment Request
+                              </Button>
                             </Box>
                           ) : (
                             <Button
@@ -485,7 +620,7 @@ const SettlementCard = ({
                                 size="small"
                                 startIcon={<CloseIcon />}
                                 disabled={loadingActionId !== null}
-                                onClick={() => handleReject(item.settlement_id)}
+                                onClick={() => handleOpenRejectModal(item)}
                                 sx={{ textTransform: "none", fontSize: "0.75rem", borderRadius: 2 }}
                               >
                                 Not Received
@@ -530,6 +665,77 @@ const SettlementCard = ({
           })}
         </Box>
       )}
+
+      {/* How Was This Calculated Breakdown Modal */}
+      <SettlementBreakdownModal
+        open={Boolean(breakdownItem)}
+        onClose={() => setBreakdownItem(null)}
+        settlementItem={breakdownItem}
+        expenses={expenses}
+        summary={summary}
+        currentUser={currentUser}
+      />
+
+      {/* Rejection Feedback Dialog */}
+      <Dialog
+        open={rejectModalOpen}
+        onClose={() => setRejectModalOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3 } }}
+      >
+        <DialogTitle sx={{ fontWeight: "bold", pb: 1 }}>
+          Confirm Payment Not Received
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Please select a reason so <strong>{rejectTargetItem?.from}</strong> understands why this payment was not verified:
+          </Typography>
+
+          <Stack spacing={1} mb={2}>
+            {REJECTION_REASONS.map((r, i) => (
+              <Chip
+                key={i}
+                label={r}
+                clickable
+                color={selectedReason === r ? "error" : "default"}
+                variant={selectedReason === r ? "filled" : "outlined"}
+                onClick={() => setSelectedReason(r)}
+                sx={{
+                  justifyContent: "flex-start",
+                  height: "auto",
+                  py: 0.8,
+                  px: 1,
+                  fontSize: "0.8rem",
+                  fontWeight: selectedReason === r ? 600 : "normal"
+                }}
+              />
+            ))}
+          </Stack>
+
+          <TextField
+            fullWidth
+            size="small"
+            label="Optional custom explanation"
+            placeholder="e.g. Received ₹300 instead of ₹500"
+            value={customReason}
+            onChange={(e) => setCustomReason(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2, borderTop: 1, borderColor: "divider" }}>
+          <Button onClick={() => setRejectModalOpen(false)} color="inherit" sx={{ textTransform: "none" }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmReject}
+            variant="contained"
+            color="error"
+            sx={{ textTransform: "none", fontWeight: "bold", borderRadius: 2 }}
+          >
+            Mark as Not Received
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 };
